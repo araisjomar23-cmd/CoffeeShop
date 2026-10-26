@@ -8,6 +8,7 @@ type OrderItemInput = {
   menu_item_id: string;
   quantity: number;
   note: string;
+  addon_ids: string[];
 };
 
 type OrderType = "dine_in" | "takeaway";
@@ -64,11 +65,15 @@ export async function createOrder(
     if (typeof item.note !== "string" || item.note.length > 140) {
       return { ok: false, error: "Item notes must be 140 characters or fewer." };
     }
+    if (!Array.isArray(item.addon_ids) || item.addon_ids.length > 3 || item.addon_ids.some((id) => typeof id !== "string" || !UUID_PATTERN.test(id)) || new Set(item.addon_ids).size !== item.addon_ids.length) {
+      return { ok: false, error: "Choose valid, non-duplicate add-ons." };
+    }
 
     rpcItems.push({
       menu_item_id: item.menu_item_id,
       quantity: item.quantity,
       note: item.note.trim(),
+      addon_ids: item.addon_ids,
     });
   }
 

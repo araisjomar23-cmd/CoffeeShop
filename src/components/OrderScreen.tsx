@@ -3,11 +3,11 @@
 import { useEffect, useReducer, useRef, useState } from "react";
 import { createOrder } from "@/app/actions";
 import { formatPeso } from "@/lib/money";
-import { calculateTicketTotal, restoreTicketSnapshot, searchMenuItems } from "@/lib/order-ticket";
+import { calculateTicketTotal, cartLineKey, isAddonAllowed, restoreTicketSnapshot, searchMenuItems } from "@/lib/order-ticket";
 import type { Tables } from "@/types/database";
 
 type MenuItem = Tables<"menu_items">;
-type CartLine = { item: MenuItem; quantity: number; note: string };
+type CartLine = { key: string; item: MenuItem; quantity: number; note: string; addons: MenuItem[] };
 type Cart = Record<string, CartLine>;
 type MenuDisplayCard =
   | { kind: "item"; item: MenuItem }
@@ -22,7 +22,7 @@ type SaveFeedback =
   | { kind: "error"; detail: string };
 
 type TicketAction =
-  | { type: "add"; item: MenuItem }
+  | { type: "add"; item: MenuItem; addons: MenuItem[] }
   | { type: "increase"; id: string }
   | { type: "decrease"; id: string }
   | { type: "set_note"; id: string; note: string }
@@ -33,32 +33,39 @@ type PopularItem = { id: string; quantity: number };
 
 const EMPTY_CART: Cart = {};
 
-function updateQuantity(cart: Cart, id: string, amount: number): Cart {
-  const line = cart[id];
+function productQuantity(cart: Cart, itemId: string) {
+  return Object.values(cart).reduce((total, line) => total + (line.item.id === itemId ? line.quantity : 0), 0);
+}
+
+function updateQuantity(cart: Cart, key: string, amount: number): Cart {
+  const line = cart[key];
   if (!line) return cart;
   if (amount > 0 && line.quantity >= 99) return cart;
 
   const quantity = line.quantity + amount;
   if (quantity <= 0) {
     const nextCart = { ...cart };
-    delete nextCart[id];
+    delete nextCart[key];
     return nextCart;
   }
 
-  return { ...cart, [id]: { ...line, quantity } };
+  return { ...cart, [key]: { ...line, quantity } };
 }
 
 function ticketReducer(cart: Cart, action: TicketAction): Cart {
   switch (action.type) {
     case "add": {
-      const existingLine = cart[action.item.id];
+      const key = cartLineKey(action.item.id, action.addons.map((addon) => addon.id));
+      const existingLine = cart[key];
       if (existingLine?.quantity >= 99) return cart;
       return {
         ...cart,
-        [action.item.id]: {
+        [key]: {
+          key,
           item: action.item,
           quantity: existingLine ? existingLine.quantity + 1 : 1,
           note: existingLine?.note ?? "",
+          addons: action.addons,
         },
       };
     }
@@ -77,7 +84,7 @@ function ticketReducer(cart: Cart, action: TicketAction): Cart {
   }
 }
 
-export default function OrderScreen({ items, popularItemIds }: { items: MenuItem[]; popularItemIds: PopularItem[] }) {
+export default function OrderScreen({ items, addons, popularItemIds }: { items: MenuItem[]; addons: MenuItem[]; popularItemIds: PopularItem[] }) {
   const [cart, dispatch] = useReducer(ticketReducer, EMPTY_CART);
   const [selectedCategory, setSelectedCategory] = useState(
     () => items.some((item) => item.category === "Coffee") ? "Coffee" : items.some((item) => item.category === "Milk Tea") ? "Milk Tea" : items[0]?.category ?? "",
@@ -88,6 +95,8 @@ export default function OrderScreen({ items, popularItemIds }: { items: MenuItem
   const [cartRestored, setCartRestored] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [saveFeedback, setSaveFeedback] = useState<SaveFeedback | null>(null);
+  const [customizingItem, setCustomizingItem] = useState<MenuItem | null>(null);
+  const [selectedAddonIds, setSelectedAddonIds] = useState<string[]>([]);
   const didRestore = useRef(false);
   const requestIdRef = useRef<string | null>(null);
 
@@ -97,7 +106,7 @@ export default function OrderScreen({ items, popularItemIds }: { items: MenuItem
     try {
       const saved = sessionStorage.getItem("coffee-pos-order-ticket-v1");
       if (saved) {
-        const restored = restoreTicketSnapshot(JSON.parse(saved), items);
+        const restored = restoreTicketSnapshot(JSON.parse(saved), items, addons);
         dispatch({ type: "restore", cart: restored.cart });
         // Restoring from sessionStorage is an intentional external-to-React state sync.
         // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -109,13 +118,13 @@ export default function OrderScreen({ items, popularItemIds }: { items: MenuItem
       // Storage can be unavailable in private browsing; the in-memory ticket still works.
     }
     setCartRestored(true);
-  }, [items]);
+  }, [items, addons]);
 
   useEffect(() => {
     if (!cartRestored) return;
     try {
       sessionStorage.setItem("coffee-pos-order-ticket-v1", JSON.stringify({
-        lines: Object.values(cart).map((line) => ({ id: line.item.id, quantity: line.quantity, note: line.note })),
+        lines: Object.values(cart).map((line) => ({ id: line.item.id, addonIds: line.addons.map((addon) => addon.id), quantity: line.quantity, note: line.note })),
         customerName,
         orderType,
         requestId: requestIdRef.current,
@@ -147,12 +156,30 @@ export default function OrderScreen({ items, popularItemIds }: { items: MenuItem
     setOrderType(value);
   }
 
+  function beginAddItem(item: MenuItem) {
+    const choices = addons.filter((addon) => isAddonAllowed(item.category, addon.name));
+    if (choices.length === 0) {
+      updateTicket({ type: "add", item, addons: [] });
+      return;
+    }
+    setCustomizingItem(item);
+    setSelectedAddonIds([]);
+  }
+
+  function addCustomizedItem() {
+    if (!customizingItem) return;
+    const selectedAddons = addons.filter((addon) => selectedAddonIds.includes(addon.id));
+    updateTicket({ type: "add", item: customizingItem, addons: selectedAddons });
+    setCustomizingItem(null);
+    setSelectedAddonIds([]);
+  }
+
   async function handleSaveOrder() {
     const requestId = requestIdRef.current ?? crypto.randomUUID();
     requestIdRef.current = requestId;
     try {
       sessionStorage.setItem("coffee-pos-order-ticket-v1", JSON.stringify({
-        lines: lines.map((line) => ({ id: line.item.id, quantity: line.quantity, note: line.note })),
+        lines: lines.map((line) => ({ id: line.item.id, addonIds: line.addons.map((addon) => addon.id), quantity: line.quantity, note: line.note })),
         customerName,
         orderType,
         requestId,
@@ -169,6 +196,7 @@ export default function OrderScreen({ items, popularItemIds }: { items: MenuItem
           menu_item_id: line.item.id,
           quantity: line.quantity,
           note: line.note,
+          addon_ids: line.addons.map((addon) => addon.id),
         })),
         customerName,
         orderType,
@@ -238,7 +266,7 @@ export default function OrderScreen({ items, popularItemIds }: { items: MenuItem
 
           {popularItems.length > 0 && !normalizedQuery && <section aria-labelledby="popular-items-heading" className="mb-6">
             <div className="mb-3 flex items-baseline justify-between gap-3"><h3 id="popular-items-heading" className="font-display text-2xl">Popular this week</h3><p className="text-xs text-muted">Based on the last 7 days</p></div>
-            <div className="flex gap-3 overflow-x-auto pb-2">{popularItems.map(({ item, quantity }) => <button key={item.id} type="button" onClick={() => updateTicket({ type: "add", item })} disabled={isSaving || !cartRestored || (cart[item.id]?.quantity ?? 0) >= 99} className="flex min-h-16 min-w-40 touch-manipulation flex-col justify-center rounded-xl border border-roast/15 bg-counter px-4 text-left hover:border-pistachio focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-pistachio disabled:opacity-50"><span className="font-semibold">{item.name}</span><span className="mt-1 text-xs text-muted">{quantity} sold · {formatPeso(item.price_centavos)}</span></button>)}</div>
+            <div className="flex gap-3 overflow-x-auto pb-2">{popularItems.map(({ item, quantity }) => <button key={item.id} type="button" onClick={() => beginAddItem(item)} disabled={isSaving || !cartRestored || productQuantity(cart, item.id) >= 99} className="flex min-h-16 min-w-40 touch-manipulation flex-col justify-center rounded-xl border border-roast/15 bg-counter px-4 text-left hover:border-pistachio focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-pistachio disabled:opacity-50"><span className="font-semibold">{item.name}</span><span className="mt-1 text-xs text-muted">{quantity} sold · {formatPeso(item.price_centavos)}</span></button>)}</div>
           </section>}
 
           <div
@@ -280,9 +308,9 @@ export default function OrderScreen({ items, popularItemIds }: { items: MenuItem
                   return <article key={`sized-drink-${card.name}`} className="min-w-0 rounded-2xl border border-roast/15 bg-counter p-4 text-roast sm:p-5">
                     <h4 className="mb-4 min-h-7 text-base font-semibold leading-snug sm:text-lg">{card.name}</h4>
                     <div className="grid grid-cols-2 gap-2">{card.sizes.map((item) => {
-                      const quantity = cart[item.id]?.quantity ?? 0;
+                      const quantity = productQuantity(cart, item.id);
                       const size = item.name.match(/\((\d+) oz\)$/)?.[1] ?? "";
-                      return <button key={item.id} type="button" aria-label={`Add ${card.name}, ${size} ounces, to order`} disabled={isSaving || !cartRestored || quantity >= 99} onClick={() => updateTicket({ type: "add", item })} className="relative flex min-h-14 touch-manipulation flex-col items-center justify-center rounded-xl border border-roast/20 px-2 py-2 text-sm font-semibold hover:border-pistachio focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-pistachio disabled:opacity-50">
+                      return <button key={item.id} type="button" aria-label={`Add ${card.name}, ${size} ounces, to order`} disabled={isSaving || !cartRestored || quantity >= 99} onClick={() => beginAddItem(item)} className="relative flex min-h-14 touch-manipulation flex-col items-center justify-center rounded-xl border border-roast/20 px-2 py-2 text-sm font-semibold hover:border-pistachio focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-pistachio disabled:opacity-50">
                         <span>{size} oz</span><span className="mt-0.5 tabular-nums">{formatPeso(item.price_centavos)}</span>
                         {quantity > 0 && <span className="absolute -right-2 -top-2 inline-flex h-6 min-w-6 items-center justify-center rounded-full bg-pistachio px-1 text-xs text-counter">{quantity}</span>}
                       </button>;
@@ -290,7 +318,7 @@ export default function OrderScreen({ items, popularItemIds }: { items: MenuItem
                   </article>;
                 }
                 const { item } = card;
-                const quantity = cart[item.id]?.quantity ?? 0;
+                const quantity = productQuantity(cart, item.id);
                 const quantityLimitReached = quantity >= 99;
 
                 return (
@@ -303,7 +331,7 @@ export default function OrderScreen({ items, popularItemIds }: { items: MenuItem
                         : `Add ${item.name} to order`
                     }
                     disabled={isSaving || !cartRestored || quantityLimitReached}
-                    onClick={() => updateTicket({ type: "add", item })}
+                    onClick={() => beginAddItem(item)}
                     className="relative flex min-h-28 touch-manipulation flex-col justify-between rounded-2xl border border-roast/15 bg-counter p-4 text-left text-roast transition-transform duration-100 active:scale-[0.98] hover:border-pistachio/60 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-pistachio motion-reduce:transition-none motion-reduce:active:scale-100 disabled:cursor-not-allowed disabled:opacity-50 sm:p-5"
                   >
                     {quantity > 0 && (
@@ -352,6 +380,24 @@ export default function OrderScreen({ items, popularItemIds }: { items: MenuItem
           />
         </aside>
       </div>
+
+      {customizingItem && <div className="fixed inset-0 z-50 flex items-end justify-center bg-roast/50 p-0 sm:items-center sm:p-4" onMouseDown={(event) => { if (event.target === event.currentTarget) setCustomizingItem(null); }}>
+        <section role="dialog" aria-modal="true" aria-labelledby="customize-item-heading" className="max-h-[90dvh] w-full overflow-y-auto rounded-t-3xl bg-counter p-5 text-roast shadow-2xl sm:max-w-md sm:rounded-2xl">
+          <div className="flex items-start justify-between gap-4">
+            <div><h2 id="customize-item-heading" className="font-display text-2xl">{customizingItem.name}</h2><p className="mt-1 text-sm text-muted">Add extras (optional)</p></div>
+            <button type="button" onClick={() => setCustomizingItem(null)} className="min-h-11 min-w-11 rounded-full border border-roast/20 text-xl" aria-label="Close item options">×</button>
+          </div>
+          <div className="mt-4 space-y-2">{addons.filter((addon) => isAddonAllowed(customizingItem.category, addon.name)).map((addon) => {
+            const checked = selectedAddonIds.includes(addon.id);
+            return <label key={addon.id} className="flex min-h-14 cursor-pointer items-center justify-between gap-4 rounded-xl border border-roast/15 px-4 py-3 hover:border-pistachio">
+              <span className="font-semibold">{addon.name}</span><span className="ml-auto text-sm tabular-nums">+{formatPeso(addon.price_centavos)}</span>
+              <input type="checkbox" checked={checked} onChange={() => setSelectedAddonIds((current) => checked ? current.filter((id) => id !== addon.id) : [...current, addon.id])} className="h-5 w-5 accent-[#3f5b45]" />
+            </label>;
+          })}</div>
+          <p className="mt-5 flex items-center justify-between border-t border-roast/10 pt-4 font-semibold"><span>Item total</span><span className="tabular-nums">{formatPeso(customizingItem.price_centavos + addons.filter((addon) => selectedAddonIds.includes(addon.id)).reduce((sum, addon) => sum + addon.price_centavos, 0))}</span></p>
+          <button type="button" onClick={addCustomizedItem} className="mt-4 min-h-14 w-full rounded-xl bg-pistachio px-4 font-bold text-counter">Add to order</button>
+        </section>
+      </div>}
 
       <div className="fixed inset-x-0 bottom-0 z-20 border-t border-roast/15 bg-sticky p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] backdrop-blur lg:hidden">
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-1">
@@ -449,18 +495,19 @@ function TicketPanel({
       ) : (
         <ul className="mt-5">
           {lines.map((line) => {
-            const lineTotalCentavos =
-              line.item.price_centavos * line.quantity;
+            const unitTotalCentavos = line.item.price_centavos + line.addons.reduce((sum, addon) => sum + addon.price_centavos, 0);
+            const lineTotalCentavos = unitTotalCentavos * line.quantity;
 
             return (
               <li
-                key={`${line.item.id}-${line.quantity}`}
+                key={line.key}
                 className="flex items-center justify-between gap-3 border-b border-dashed border-roast/30 py-4 first:pt-0 motion-safe:animate-[ticket-pop_120ms_ease-out] motion-reduce:animate-none"
               >
                 <div className="min-w-0 flex-1">
                   <p className="truncate font-semibold">{line.item.name}</p>
+                  {line.addons.length > 0 && <p className="mt-1 text-xs text-muted">+ {line.addons.map((addon) => addon.name).join(", ")}</p>}
                   <p className="mt-1 text-sm text-muted tabular-nums">
-                    {line.quantity} × {formatPeso(line.item.price_centavos)}
+                    {line.quantity} × {formatPeso(unitTotalCentavos)}
                   </p>
                   <label className="mt-2 block text-xs font-semibold text-muted">
                     Item note (optional)
@@ -469,7 +516,7 @@ function TicketPanel({
                       value={line.note}
                       maxLength={140}
                       disabled={isSaving}
-                      onChange={(event) => dispatch({ type: "set_note", id: line.item.id, note: event.target.value })}
+                      onChange={(event) => dispatch({ type: "set_note", id: line.key, note: event.target.value })}
                       placeholder="e.g. pearl for Milk Tea #1; combo choices"
                       className="mt-1 min-h-10 w-full rounded-lg border border-roast/20 bg-counter px-3 text-sm font-normal text-roast outline-none focus:border-pistachio"
                     />
@@ -480,7 +527,7 @@ function TicketPanel({
                     type="button"
                     aria-label={`Remove one ${line.item.name}`}
                     onClick={() =>
-                      dispatch({ type: "decrease", id: line.item.id })
+                      dispatch({ type: "decrease", id: line.key })
                     }
                     disabled={isSaving}
                     className="min-h-12 min-w-12 rounded-xl border border-roast/25 text-xl font-semibold text-roast hover:bg-counter/70 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-pistachio disabled:cursor-not-allowed disabled:opacity-60"
@@ -494,7 +541,7 @@ function TicketPanel({
                     type="button"
                     aria-label={`Add one ${line.item.name}`}
                     onClick={() =>
-                      dispatch({ type: "increase", id: line.item.id })
+                      dispatch({ type: "increase", id: line.key })
                     }
                     disabled={isSaving || line.quantity >= 99}
                     className="min-h-12 min-w-12 rounded-xl border border-roast/25 text-xl font-semibold text-roast hover:bg-counter/70 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-pistachio disabled:cursor-not-allowed disabled:opacity-60"

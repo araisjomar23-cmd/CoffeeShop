@@ -7,6 +7,13 @@ const menu: TicketMenuItem[] = [
   { id: "latte", name: "Cafe Latte", category: "Drinks", price_centavos: 15000 },
   { id: "iced-latte", name: "Iced Latte", category: "Drinks", price_centavos: 16000 },
   { id: "croissant", name: "Butter Croissant", category: "Pastries", price_centavos: 12500 },
+  { id: "milk-tea", name: "Red Velvet (12 oz)", category: "Milk Tea", price_centavos: 2900 },
+  { id: "burger", name: "Regular Burger", category: "Burgers", price_centavos: 5900 },
+];
+const addons: TicketMenuItem[] = [
+  { id: "pearl", name: "Pearl", category: "Add-ons", price_centavos: 1000 },
+  { id: "lettuce", name: "Lettuce", category: "Add-ons", price_centavos: 1000 },
+  { id: "cheese", name: "Cheese", category: "Add-ons", price_centavos: 1000 },
 ];
 
 test("calculates a realistic mixed order total in centavos", () => {
@@ -16,6 +23,24 @@ test("calculates a realistic mixed order total in centavos", () => {
     { item: menu[3], quantity: 2 },
   ]);
   assert.equal(total, 71000);
+});
+
+test("calculates and restores milk tea and burger add-ons with the right prices", () => {
+  assert.equal(calculateTicketTotal([
+    { item: menu[4], addons: [addons[0]], quantity: 1 },
+    { item: menu[5], addons: [addons[1], addons[2]], quantity: 1 },
+  ]), 11800);
+
+  const ticket = restoreTicketSnapshot({
+    lines: [
+      { id: "milk-tea", addonIds: ["pearl"], quantity: 1, note: "less ice" },
+      { id: "burger", addonIds: ["pearl", "lettuce"], quantity: 1, note: "" },
+    ],
+  }, menu, addons);
+  const milkTeaLine = Object.values(ticket.cart).find((line) => line.item.id === "milk-tea");
+  const burgerLine = Object.values(ticket.cart).find((line) => line.item.id === "burger");
+  assert.deepEqual(milkTeaLine?.addons.map((addon) => addon.name), ["Pearl"]);
+  assert.deepEqual(burgerLine?.addons.map((addon) => addon.name), ["Lettuce"]);
 });
 
 test("search finds items across categories and ignores case and accents", () => {
