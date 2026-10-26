@@ -11,7 +11,7 @@ type CartLine = { item: MenuItem; quantity: number; note: string };
 type Cart = Record<string, CartLine>;
 type MenuDisplayCard =
   | { kind: "item"; item: MenuItem }
-  | { kind: "milk-tea"; flavor: string; sizes: MenuItem[] };
+  | { kind: "sized-drink"; name: string; sizes: MenuItem[] };
 type SaveFeedback =
   | {
       kind: "success";
@@ -80,7 +80,7 @@ function ticketReducer(cart: Cart, action: TicketAction): Cart {
 export default function OrderScreen({ items, popularItemIds }: { items: MenuItem[]; popularItemIds: PopularItem[] }) {
   const [cart, dispatch] = useReducer(ticketReducer, EMPTY_CART);
   const [selectedCategory, setSelectedCategory] = useState(
-    () => items.some((item) => item.category === "Milk Tea") ? "Milk Tea" : items[0]?.category ?? "",
+    () => items.some((item) => item.category === "Coffee") ? "Coffee" : items.some((item) => item.category === "Milk Tea") ? "Milk Tea" : items[0]?.category ?? "",
   );
   const [customerName, setCustomerName] = useState("");
   const [orderType, setOrderType] = useState<"dine_in" | "takeaway">("takeaway");
@@ -205,7 +205,7 @@ export default function OrderScreen({ items, popularItemIds }: { items: MenuItem
     categoryItems.push(item);
     itemsByCategory.set(item.category, categoryItems);
   }
-  const categoryPriority = ["Milk Tea", "Drinks", "Burgers", "Sides", "Combos", "Add-ons"];
+  const categoryPriority = ["Coffee", "Milk Tea", "Burgers", "Sides", "Combos", "Add-ons"];
   const categories = Array.from(itemsByCategory.keys()).sort((a, b) => {
     const aPriority = categoryPriority.indexOf(a);
     const bPriority = categoryPriority.indexOf(b);
@@ -213,7 +213,7 @@ export default function OrderScreen({ items, popularItemIds }: { items: MenuItem
   });
   const normalizedQuery = searchQuery.trim();
   const visibleItems = searchMenuItems(items, itemsByCategory.get(selectedCategory) ?? [], searchQuery);
-  const displayCards = groupMilkTeaSizes(visibleItems);
+  const displayCards = groupSizedDrinks(visibleItems);
   const popularItems = popularItemIds.flatMap((popular) => {
     const item = items.find((menuItem) => menuItem.id === popular.id);
     return item ? [{ item, quantity: popular.quantity }] : [];
@@ -276,13 +276,13 @@ export default function OrderScreen({ items, popularItemIds }: { items: MenuItem
             </h3>
             {displayCards.length === 0 ? <p className="rounded-2xl border border-dashed border-roast/20 bg-counter p-8 text-center text-muted">No menu items match “{searchQuery.trim()}”. Try another search.</p> : <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4 md:grid-cols-3">
               {displayCards.map((card) => {
-                if (card.kind === "milk-tea") {
-                  return <article key={`milk-tea-${card.flavor}`} className="min-w-0 rounded-2xl border border-roast/15 bg-counter p-4 text-roast sm:p-5">
-                    <h4 className="mb-4 min-h-7 text-base font-semibold leading-snug sm:text-lg">{card.flavor}</h4>
+                if (card.kind === "sized-drink") {
+                  return <article key={`sized-drink-${card.name}`} className="min-w-0 rounded-2xl border border-roast/15 bg-counter p-4 text-roast sm:p-5">
+                    <h4 className="mb-4 min-h-7 text-base font-semibold leading-snug sm:text-lg">{card.name}</h4>
                     <div className="grid grid-cols-2 gap-2">{card.sizes.map((item) => {
                       const quantity = cart[item.id]?.quantity ?? 0;
                       const size = item.name.match(/\((\d+) oz\)$/)?.[1] ?? "";
-                      return <button key={item.id} type="button" aria-label={`Add ${card.flavor}, ${size} ounces, to order`} disabled={isSaving || !cartRestored || quantity >= 99} onClick={() => updateTicket({ type: "add", item })} className="relative flex min-h-14 touch-manipulation flex-col items-center justify-center rounded-xl border border-roast/20 px-2 py-2 text-sm font-semibold hover:border-pistachio focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-pistachio disabled:opacity-50">
+                      return <button key={item.id} type="button" aria-label={`Add ${card.name}, ${size} ounces, to order`} disabled={isSaving || !cartRestored || quantity >= 99} onClick={() => updateTicket({ type: "add", item })} className="relative flex min-h-14 touch-manipulation flex-col items-center justify-center rounded-xl border border-roast/20 px-2 py-2 text-sm font-semibold hover:border-pistachio focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-pistachio disabled:opacity-50">
                         <span>{size} oz</span><span className="mt-0.5 tabular-nums">{formatPeso(item.price_centavos)}</span>
                         {quantity > 0 && <span className="absolute -right-2 -top-2 inline-flex h-6 min-w-6 items-center justify-center rounded-full bg-pistachio px-1 text-xs text-counter">{quantity}</span>}
                       </button>;
@@ -377,22 +377,22 @@ export default function OrderScreen({ items, popularItemIds }: { items: MenuItem
   );
 }
 
-function groupMilkTeaSizes(items: MenuItem[]): MenuDisplayCard[] {
+function groupSizedDrinks(items: MenuItem[]): MenuDisplayCard[] {
   const cards: MenuDisplayCard[] = [];
-  const flavorCards = new Map<string, Extract<MenuDisplayCard, { kind: "milk-tea" }>>();
+  const sizedDrinkCards = new Map<string, Extract<MenuDisplayCard, { kind: "sized-drink" }>>();
 
   for (const item of items) {
-    const match = item.category === "Milk Tea" ? item.name.match(/^(.*) \((?:12|16) oz\)$/) : null;
+    const match = item.category === "Milk Tea" || item.category === "Coffee" ? item.name.match(/^(.*) \((?:12|16) oz\)$/) : null;
     if (!match) {
       cards.push({ kind: "item", item });
       continue;
     }
 
-    const flavor = match[1].replace(/^Milk Tea - /, "");
-    let card = flavorCards.get(flavor);
+    const flavor = match[1];
+    let card = sizedDrinkCards.get(flavor);
     if (!card) {
-      card = { kind: "milk-tea", flavor, sizes: [] };
-      flavorCards.set(flavor, card);
+      card = { kind: "sized-drink", name: flavor, sizes: [] };
+      sizedDrinkCards.set(flavor, card);
       cards.push(card);
     }
     card.sizes.push(item);
