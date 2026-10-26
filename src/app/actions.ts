@@ -13,6 +13,7 @@ type OrderItemInput = {
 
 type OrderType = "dine_in" | "takeaway";
 type PaymentMethod = "cash" | "e_wallet";
+type EditOrderItemInput = { order_item_id: string; quantity: number; note: string };
 
 const UUID_PATTERN = /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i;
 
@@ -131,10 +132,59 @@ export async function cancelPaidOrder(
       p_reason: reason.trim(),
     });
     if (error) return { ok: false, error: error.message };
+    revalidatePath("/kitchen");
     revalidatePath("/summary");
     return { ok: true };
   } catch (error) {
     return { ok: false, error: error instanceof Error ? error.message : "Unable to cancel the order." };
+  }
+}
+
+export async function editActiveOrder(
+  orderId: string,
+  customerName: string,
+  orderType: OrderType,
+  items: EditOrderItemInput[],
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  await requireStaffRole();
+  if (!UUID_PATTERN.test(orderId)) return { ok: false, error: "Invalid order." };
+  if (typeof customerName !== "string" || customerName.length > 100) {
+    return { ok: false, error: "Customer name must be 100 characters or fewer." };
+  }
+  if (orderType !== "dine_in" && orderType !== "takeaway") {
+    return { ok: false, error: "Choose dine-in or takeaway." };
+  }
+  if (!Array.isArray(items) || items.length === 0 || items.length > 50) {
+    return { ok: false, error: "An order must contain between 1 and 50 items." };
+  }
+  const seenIds = new Set<string>();
+  for (const item of items) {
+    if (!item || typeof item.order_item_id !== "string" || !UUID_PATTERN.test(item.order_item_id) || seenIds.has(item.order_item_id)) {
+      return { ok: false, error: "Each edited item must have a unique, valid ID." };
+    }
+    seenIds.add(item.order_item_id);
+    if (!Number.isInteger(item.quantity) || item.quantity < 0 || item.quantity > 99) {
+      return { ok: false, error: "Item quantities must be between 0 and 99." };
+    }
+    if (typeof item.note !== "string" || item.note.length > 140) {
+      return { ok: false, error: "Item notes must be 140 characters or fewer." };
+    }
+  }
+
+  try {
+    const supabase = await createClient();
+    const { error } = await supabase.rpc("edit_active_order", {
+      p_order_id: orderId,
+      p_customer_name: customerName.trim(),
+      p_order_type: orderType,
+      p_items: items,
+    });
+    if (error) return { ok: false, error: error.message };
+    revalidatePath("/kitchen");
+    revalidatePath("/summary");
+    return { ok: true };
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : "Unable to edit the order." };
   }
 }
 

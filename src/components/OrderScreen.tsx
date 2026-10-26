@@ -265,7 +265,7 @@ export default function OrderScreen({ items, addons }: { items: MenuItem[]; addo
           <div
             role="group"
             aria-label="Menu categories"
-            className="mb-6 flex gap-3 overflow-x-auto pb-1"
+            className="sticky top-0 z-10 -mx-4 mb-6 flex gap-3 overflow-x-auto bg-steam/95 px-4 py-2 pb-2 backdrop-blur sm:mx-0 sm:px-0 sm:py-2 lg:static lg:bg-transparent lg:py-0 lg:backdrop-blur-0"
           >
               {categories.map((category) => {
               const isSelected = category === selectedCategory;
@@ -348,7 +348,7 @@ export default function OrderScreen({ items, addons }: { items: MenuItem[]; addo
         <aside
           id="order-ticket"
           aria-labelledby="ticket-heading"
-          className="relative overflow-hidden rounded-2xl border border-roast/15 bg-sticky p-5 text-roast shadow-[0_8px_18px_rgba(43,33,28,0.12)] lg:sticky lg:top-6 lg:p-6"
+          className="relative scroll-mt-4 overflow-hidden rounded-2xl border border-roast/15 bg-sticky p-5 text-roast shadow-[0_8px_18px_rgba(43,33,28,0.12)] lg:sticky lg:top-6 lg:p-6"
         >
           <span aria-hidden="true" className="pointer-events-none absolute right-0 top-0 h-8 w-8 bg-[linear-gradient(225deg,var(--steam)_0_49%,rgba(43,33,28,0.12)_50%,transparent_54%)]" />
           {saveFeedback?.kind === "success" && (
@@ -396,14 +396,20 @@ export default function OrderScreen({ items, addons }: { items: MenuItem[]; addo
 
       <div className="fixed inset-x-0 bottom-0 z-20 border-t border-roast/15 bg-sticky p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] backdrop-blur lg:hidden">
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-1">
-          <div aria-live="polite">
+          <button
+            type="button"
+            aria-controls="order-ticket"
+            aria-label={`View order ticket, ${itemCount} ${itemCount === 1 ? "item" : "items"}`}
+            onClick={() => document.getElementById("order-ticket")?.scrollIntoView({ behavior: "smooth", block: "start" })}
+            className="min-h-14 min-w-0 flex-1 rounded-xl px-2 text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-pistachio"
+          >
             <p className="text-xs font-medium text-muted">
               Ticket · {itemCount} {itemCount === 1 ? "item" : "items"}
             </p>
             <p className="text-lg font-bold text-roast tabular-nums">
               {formatPeso(orderTotalCentavos)}
             </p>
-          </div>
+          </button>
           <button
             type="button"
             onClick={() => void handleSaveOrder()}

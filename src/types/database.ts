@@ -330,6 +330,10 @@ export type Database = {
         Args: { p_order_id: string; p_reason: string }
         Returns: undefined
       }
+      edit_active_order: {
+        Args: { p_order_id: string; p_customer_name: string; p_order_type: string; p_items: Json }
+        Returns: undefined
+      }
       transition_order: {
         Args: { p_order_id: string; p_next_status: string }
         Returns: undefined
