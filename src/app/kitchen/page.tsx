@@ -29,7 +29,8 @@ async function AuthorizedKitchenPage() {
       .select("id, order_number, status, created_at, customer_name, order_type, total_centavos, order_items(item_name, quantity, note)")
       .eq("order_date", today)
       .neq("status", "cancelled")
-      .order("created_at", { ascending: true });
+      .order("created_at", { ascending: false })
+      .order("order_number", { ascending: false });
     if (error) throw error;
     orders = (data ?? []) as KitchenOrder[];
   } catch {
@@ -37,7 +38,7 @@ async function AuthorizedKitchenPage() {
   }
 
   const activeOrders = orders.filter((order) => order.status === "new" || order.status === "ready");
-  const completedOrders = orders.filter((order) => order.status === "completed").reverse();
+  const completedOrders = orders.filter((order) => order.status === "completed");
 
   return (
     <main className="min-h-screen bg-steam text-roast">
