@@ -1,5 +1,21 @@
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
+## Sales exports and database backups
+
+On the Sales page, choose a date and select **Download daily sales CSV** to save that day's orders and items. This is a report for the owner; it is not a complete database backup.
+
+For a full backup of the POS database on the free Supabase plan, use the Supabase CLI. Install Docker Desktop, then log in and link this local project to the correct Supabase project. Run these commands from the project folder, replacing the placeholder with the project reference from the Supabase project URL:
+
+```powershell
+npx supabase login
+npx supabase link --project-ref <your-project-ref>
+New-Item -ItemType Directory -Force backups
+npx supabase db dump --linked -f backups/schema.sql
+npx supabase db dump --linked --data-only --use-copy -f backups/data.sql
+```
+
+The first file contains the database schema and functions; the second contains the table data. Keep both files together and store a copy somewhere outside this computer and outside the Supabase project. The `backups/` folder is excluded from Git because these files contain shop data. Repeat the dump regularly. Supabase documents `db dump` as the free-plan backup approach: https://supabase.com/docs/guides/platform/backups.
+
 ## Getting Started
 
 First, run the development server:

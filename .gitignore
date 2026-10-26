@@ -20,6 +20,9 @@
 # production
 /build
 
+# database exports contain shop data and must stay out of source control
+/backups/
+
 # misc
 .DS_Store
 *.pem
