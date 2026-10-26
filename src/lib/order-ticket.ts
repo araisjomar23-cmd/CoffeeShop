@@ -9,6 +9,7 @@ export type RestoredTicket<T extends TicketMenuItem> = {
   cart: Record<string, { key: string; item: T; quantity: number; note: string; addons: T[] }>;
   customerName: string;
   orderType: "dine_in" | "takeaway";
+  paymentMethod: "cash" | "e_wallet";
   requestId: string | null;
 };
 
@@ -29,11 +30,12 @@ export function searchMenuItems<T extends Pick<TicketMenuItem, "name" | "categor
 }
 
 export function restoreTicketSnapshot<T extends TicketMenuItem>(snapshot: unknown, menuItems: T[], availableAddons: T[] = []): RestoredTicket<T> {
-  const restored: RestoredTicket<T> = { cart: {}, customerName: "", orderType: "takeaway", requestId: null };
+  const restored: RestoredTicket<T> = { cart: {}, customerName: "", orderType: "takeaway", paymentMethod: "cash", requestId: null };
   if (!snapshot || typeof snapshot !== "object") return restored;
-  const saved = snapshot as { lines?: unknown; customerName?: unknown; orderType?: unknown; requestId?: unknown };
+  const saved = snapshot as { lines?: unknown; customerName?: unknown; orderType?: unknown; paymentMethod?: unknown; requestId?: unknown };
   if (typeof saved.customerName === "string") restored.customerName = saved.customerName.slice(0, 100);
   if (saved.orderType === "dine_in" || saved.orderType === "takeaway") restored.orderType = saved.orderType;
+  if (saved.paymentMethod === "e_wallet" || saved.paymentMethod === "cash") restored.paymentMethod = saved.paymentMethod;
   if (typeof saved.requestId === "string" && /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(saved.requestId)) restored.requestId = saved.requestId;
   if (!Array.isArray(saved.lines)) return restored;
 

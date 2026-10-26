@@ -66,3 +66,11 @@ test("restores a failed ticket while dropping stale or invalid lines", () => {
   assert.equal(ticket.cart.cappuccino.quantity, 2);
   assert.equal(ticket.cart.cappuccino.note, "less sugar");
 });
+
+test("restores the selected cashless method and defaults older tickets to cash", () => {
+  const cashlessTicket = restoreTicketSnapshot({ paymentMethod: "e_wallet" }, menu);
+  const olderTicket = restoreTicketSnapshot({}, menu);
+
+  assert.equal(cashlessTicket.paymentMethod, "e_wallet");
+  assert.equal(olderTicket.paymentMethod, "cash");
+});

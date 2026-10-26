@@ -75,7 +75,7 @@ export async function GET(request: Request) {
           }).format(new Date(order.created_at)),
           order.customer_name?.trim() || "",
           order.order_type ?? "",
-          order.payment_method ?? "",
+          paymentMethodLabel(order.payment_method),
           order.status,
           item?.item_name ?? "",
           item ? String(item.quantity) : "",
@@ -114,6 +114,13 @@ function csvCell(value: string) {
 
 function pesos(centavos: number) {
   return (centavos / 100).toFixed(2);
+}
+
+function paymentMethodLabel(method: string | null) {
+  if (method === "e_wallet") return "Cashless (GCash)";
+  if (method === "cash") return "Cash";
+  if (method === "card") return "Card";
+  return "";
 }
 
 function isRealDate(value: string) {

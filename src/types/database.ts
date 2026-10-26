@@ -298,6 +298,7 @@ export type Database = {
     Functions: {
       create_order_idempotent: {
         Args: {
+          p_payment_method: string
           p_request_id: string
           p_customer_name: string
           p_items: Json

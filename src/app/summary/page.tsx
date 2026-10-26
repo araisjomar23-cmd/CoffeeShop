@@ -132,11 +132,11 @@ async function SummaryContent({ searchParams }: { searchParams: SearchParams }) 
 
       <section aria-labelledby="payment-summary-heading" className="mb-8 rounded-2xl border border-roast/10 bg-counter p-5 sm:p-6">
         <h2 id="payment-summary-heading" className="font-display text-2xl">Sales by payment method</h2>
-        {paymentTotals.unrecorded > 0 && <p className="mt-2 rounded-xl border border-caramel/30 bg-sticky/50 p-3 text-sm">Payment is not collected in checkout right now. {formatPeso(paymentTotals.unrecorded)} across {salesOrders.filter((order) => !order.payment_method).length} orders has no payment record, so expected cash is unavailable.</p>}
+        {paymentTotals.unrecorded > 0 && <p className="mt-2 rounded-xl border border-caramel/30 bg-sticky/50 p-3 text-sm">{formatPeso(paymentTotals.unrecorded)} across {salesOrders.filter((order) => !order.payment_method).length} orders has no payment method recorded, so expected cash is unavailable.</p>}
         <dl className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
           <PaymentTile label="Cash" amount={paymentTotals.cash} />
           <PaymentTile label="Card" amount={paymentTotals.card} />
-          <PaymentTile label="E-wallet" amount={paymentTotals.e_wallet} />
+          <PaymentTile label="Cashless (GCash)" amount={paymentTotals.e_wallet} />
           <PaymentTile label="Unrecorded" amount={paymentTotals.unrecorded} />
         </dl>
       </section>
@@ -232,7 +232,7 @@ function StatusBadge({ status }: { status: string }) {
 }
 
 function paymentLabel(method: string | null) {
-  if (method === "e_wallet") return "E-wallet";
+  if (method === "e_wallet") return "Cashless · GCash";
   return method ? `${method[0].toUpperCase()}${method.slice(1)}` : "Payment not recorded";
 }
 

@@ -91,6 +91,7 @@ export default function OrderScreen({ items, addons, popularItemIds }: { items: 
   );
   const [customerName, setCustomerName] = useState("");
   const [orderType, setOrderType] = useState<"dine_in" | "takeaway">("takeaway");
+  const [paymentMethod, setPaymentMethod] = useState<"cash" | "e_wallet">("cash");
   const [searchQuery, setSearchQuery] = useState("");
   const [cartRestored, setCartRestored] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -112,6 +113,7 @@ export default function OrderScreen({ items, addons, popularItemIds }: { items: 
         // eslint-disable-next-line react-hooks/set-state-in-effect
         setCustomerName(restored.customerName);
         setOrderType(restored.orderType);
+        setPaymentMethod(restored.paymentMethod);
         requestIdRef.current = restored.requestId;
       }
     } catch {
@@ -127,12 +129,13 @@ export default function OrderScreen({ items, addons, popularItemIds }: { items: 
         lines: Object.values(cart).map((line) => ({ id: line.item.id, addonIds: line.addons.map((addon) => addon.id), quantity: line.quantity, note: line.note })),
         customerName,
         orderType,
+        paymentMethod,
         requestId: requestIdRef.current,
       }));
     } catch {
       // Storage can be unavailable in private browsing; the in-memory ticket still works.
     }
-  }, [cart, customerName, orderType, cartRestored]);
+  }, [cart, customerName, orderType, paymentMethod, cartRestored]);
   const lines = Object.values(cart);
   const orderTotalCentavos = calculateTicketTotal(lines);
   const itemCount = lines.reduce((count, line) => count + line.quantity, 0);
@@ -154,6 +157,12 @@ export default function OrderScreen({ items, addons, popularItemIds }: { items: 
     requestIdRef.current = null;
     setSaveFeedback(null);
     setOrderType(value);
+  }
+
+  function updatePaymentMethod(value: "cash" | "e_wallet") {
+    requestIdRef.current = null;
+    setSaveFeedback(null);
+    setPaymentMethod(value);
   }
 
   function beginAddItem(item: MenuItem) {
@@ -182,6 +191,7 @@ export default function OrderScreen({ items, addons, popularItemIds }: { items: 
         lines: lines.map((line) => ({ id: line.item.id, addonIds: line.addons.map((addon) => addon.id), quantity: line.quantity, note: line.note })),
         customerName,
         orderType,
+        paymentMethod,
         requestId,
       }));
     } catch {
@@ -200,6 +210,7 @@ export default function OrderScreen({ items, addons, popularItemIds }: { items: 
         })),
         customerName,
         orderType,
+        paymentMethod,
         requestId,
       );
 
@@ -211,6 +222,7 @@ export default function OrderScreen({ items, addons, popularItemIds }: { items: 
       dispatch({ type: "clear" });
       requestIdRef.current = null;
       setCustomerName("");
+      setPaymentMethod("cash");
       setSaveFeedback({
         kind: "success",
         orderNumber: result.orderNumber,
@@ -375,6 +387,8 @@ export default function OrderScreen({ items, addons, popularItemIds }: { items: 
             saveFeedback={saveFeedback?.kind === "error" ? saveFeedback : null}
             orderType={orderType}
             setOrderType={updateOrderType}
+            paymentMethod={paymentMethod}
+            setPaymentMethod={updatePaymentMethod}
             canSubmit={canSubmit}
             onSave={() => void handleSaveOrder()}
           />
@@ -457,6 +471,8 @@ function TicketPanel({
   saveFeedback,
   orderType,
   setOrderType,
+  paymentMethod,
+  setPaymentMethod,
   canSubmit,
   onSave,
 }: {
@@ -469,6 +485,8 @@ function TicketPanel({
   saveFeedback: Extract<SaveFeedback, { kind: "error" }> | null;
   orderType: "dine_in" | "takeaway";
   setOrderType: (value: "dine_in" | "takeaway") => void;
+  paymentMethod: "cash" | "e_wallet";
+  setPaymentMethod: (value: "cash" | "e_wallet") => void;
   canSubmit: boolean;
   onSave: () => void;
 }) {
@@ -573,6 +591,18 @@ function TicketPanel({
               <label key={value} className={`flex min-h-12 cursor-pointer items-center justify-center rounded-xl border px-3 text-sm font-semibold capitalize ${orderType === value ? "border-pistachio bg-pistachio/15" : "border-roast/20 bg-counter"}`}>
                 <input className="sr-only" type="radio" name="order-type" value={value} checked={orderType === value} disabled={isSaving} onChange={() => setOrderType(value)} />
                 {value === "dine_in" ? "Dine in" : "Takeaway"}
+              </label>
+            ))}
+          </div>
+        </fieldset>
+
+        <fieldset>
+          <legend className="mb-2 text-sm font-semibold">Payment method</legend>
+          <div className="grid grid-cols-2 gap-2">
+            {(["cash", "e_wallet"] as const).map((value) => (
+              <label key={value} className={`flex min-h-12 cursor-pointer items-center justify-center rounded-xl border px-3 text-sm font-semibold ${paymentMethod === value ? "border-pistachio bg-pistachio/15" : "border-roast/20 bg-counter"}`}>
+                <input className="sr-only" type="radio" name="payment-method" value={value} checked={paymentMethod === value} disabled={isSaving} onChange={() => setPaymentMethod(value)} />
+                {value === "cash" ? "Cash" : "Cashless · GCash"}
               </label>
             ))}
           </div>

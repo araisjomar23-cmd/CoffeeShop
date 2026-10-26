@@ -12,6 +12,7 @@ type OrderItemInput = {
 };
 
 type OrderType = "dine_in" | "takeaway";
+type PaymentMethod = "cash" | "e_wallet";
 
 const UUID_PATTERN = /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i;
 
@@ -19,6 +20,7 @@ export async function createOrder(
   items: OrderItemInput[],
   customerName: string,
   orderType: OrderType,
+  paymentMethod: PaymentMethod,
   requestId: string,
 ): Promise<
   | { ok: true; orderNumber: number; totalCentavos: number }
@@ -40,6 +42,9 @@ export async function createOrder(
 
   if (orderType !== "dine_in" && orderType !== "takeaway") {
     return { ok: false, error: "Choose dine-in or takeaway." };
+  }
+  if (paymentMethod !== "cash" && paymentMethod !== "e_wallet") {
+    return { ok: false, error: "Choose cash or cashless (GCash)." };
   }
   if (typeof requestId !== "string" || !UUID_PATTERN.test(requestId)) {
     return { ok: false, error: "This order could not be safely retried. Refresh and try again." };
@@ -84,6 +89,7 @@ export async function createOrder(
       p_customer_name: customerName.trim(),
       p_items: rpcItems,
       p_order_type: orderType,
+      p_payment_method: paymentMethod,
     });
 
     if (error) {
