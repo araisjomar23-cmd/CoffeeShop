@@ -3,6 +3,7 @@ import { connection } from "next/server";
 import { Suspense } from "react";
 import Image from "next/image";
 import PasswordInput from "@/components/PasswordInput";
+import SignInButton from "@/components/SignInButton";
 import { signIn } from "@/app/auth-actions";
 import { createClient } from "@/lib/supabase/server";
 
@@ -58,7 +59,7 @@ async function LoginContent({ searchParams }: LoginPageProps) {
             <label className="block text-sm font-semibold" htmlFor="password">Password</label>
             <PasswordInput />
           </div>
-          <button className="min-h-12 w-full rounded-xl bg-roast px-5 font-semibold text-counter hover:bg-roast/90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-pistachio" type="submit">Sign in</button>
+          <SignInButton />
         </form>
       </section>
     </main>
