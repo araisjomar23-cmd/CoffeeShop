@@ -7,13 +7,14 @@ import { formatPeso } from "@/lib/money";
 import StaffNav from "@/components/StaffNav";
 import KitchenOrderActions from "@/components/KitchenOrderActions";
 import KitchenQueueRefresh from "@/components/KitchenQueueRefresh";
+import RouteLoading from "@/components/RouteLoading";
 import type { Tables } from "@/types/database";
 
 type KitchenOrder = Pick<Tables<"orders">, "id" | "order_number" | "status" | "created_at" | "customer_name" | "order_type" | "total_centavos">
   & { order_items: Pick<Tables<"order_items">, "item_name" | "quantity" | "note">[] };
 
 export default async function KitchenPage() {
-  return <Suspense fallback={<p role="status" className="p-6 text-muted">Loading preparation queue...</p>}><AuthorizedKitchenPage /></Suspense>;
+  return <Suspense fallback={<RouteLoading screen="kitchen" title="Preparation queue" />}><AuthorizedKitchenPage /></Suspense>;
 }
 
 async function AuthorizedKitchenPage() {

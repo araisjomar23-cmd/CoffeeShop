@@ -7,13 +7,14 @@ import { createClient } from "@/lib/supabase/server";
 import { formatPeso } from "@/lib/money";
 import { SHOP_NAME } from "@/lib/shop";
 import PrintTicketButton from "@/components/PrintTicketButton";
+import RouteLoading from "@/components/RouteLoading";
 import type { Tables } from "@/types/database";
 
 type PrintableOrder = Pick<Tables<"orders">, "id" | "order_number" | "status" | "created_at" | "customer_name" | "order_type" | "total_centavos">
   & { order_items: Pick<Tables<"order_items">, "item_name" | "quantity" | "note">[] };
 
 export default function PrintOrderPage({ params }: { params: Promise<{ orderId: string }> }) {
-  return <Suspense fallback={<p role="status" className="p-6 text-muted">Loading order ticket...</p>}><AuthorizedPrintOrderPage params={params} /></Suspense>;
+  return <Suspense fallback={<RouteLoading screen="ticket" title="Order ticket" />}><AuthorizedPrintOrderPage params={params} /></Suspense>;
 }
 
 async function AuthorizedPrintOrderPage({ params }: { params: Promise<{ orderId: string }> }) {

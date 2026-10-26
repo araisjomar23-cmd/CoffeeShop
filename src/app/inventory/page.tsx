@@ -4,9 +4,10 @@ import StaffNav from "@/components/StaffNav";
 import InventoryManager, { type IngredientRow, type MenuItemRow, type MovementRow, type RecipeRow } from "@/components/InventoryManager";
 import { requireStaffRole } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
+import RouteLoading from "@/components/RouteLoading";
 
 export default function InventoryPage() {
-  return <Suspense fallback={<p role="status" className="p-6 text-muted">Loading inventory...</p>}><AuthorizedInventoryPage /></Suspense>;
+  return <Suspense fallback={<RouteLoading screen="inventory" title="Inventory" />}><AuthorizedInventoryPage /></Suspense>;
 }
 
 async function AuthorizedInventoryPage() {

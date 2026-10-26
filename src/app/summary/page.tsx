@@ -7,6 +7,7 @@ import StaffNav from "@/components/StaffNav";
 import CancelOrderForm from "@/components/CancelOrderForm";
 import { createClient } from "@/lib/supabase/server";
 import type { Tables } from "@/types/database";
+import RouteLoading from "@/components/RouteLoading";
 
 type Order = Tables<"orders">;
 type OrderItem = Tables<"order_items">;
@@ -273,5 +274,5 @@ function shiftDate(value: string, amount: number) {
 }
 
 function SummaryLoading() {
-  return <p role="status" className="rounded-2xl bg-counter p-6 text-muted">Loading sales summary…</p>;
+  return <RouteLoading screen="sales" title="Sales summary" />;
 }

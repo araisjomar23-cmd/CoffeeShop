@@ -1,10 +1,11 @@
-﻿import { Suspense } from "react";
+import { Suspense } from "react";
 import { connection } from "next/server";
 import OrderScreen from "@/components/OrderScreen";
 import { createClient } from "@/lib/supabase/server";
 import { SHOP_NAME } from "@/lib/shop";
 import { requireStaffRole } from "@/lib/auth";
 import StaffNav from "@/components/StaffNav";
+import RouteLoading from "@/components/RouteLoading";
 import type { Tables } from "@/types/database";
 
 type MenuItem = Tables<"menu_items">;
@@ -115,9 +116,5 @@ function MenuError({ message }: { message: string }) {
   );
 }
 function MenuLoading() {
-  return (
-    <p role="status" className="rounded-2xl bg-counter p-6 text-muted">
-      Loading menuâ€¦
-    </p>
-  );
+  return <RouteLoading screen="order" title="New order" />;
 }
