@@ -9,6 +9,9 @@ import type { Tables } from "@/types/database";
 type MenuItem = Tables<"menu_items">;
 type CartLine = { item: MenuItem; quantity: number; note: string };
 type Cart = Record<string, CartLine>;
+type MenuDisplayCard =
+  | { kind: "item"; item: MenuItem }
+  | { kind: "milk-tea"; flavor: string; sizes: MenuItem[] };
 type SaveFeedback =
   | {
       kind: "success";
@@ -77,7 +80,7 @@ function ticketReducer(cart: Cart, action: TicketAction): Cart {
 export default function OrderScreen({ items, popularItemIds }: { items: MenuItem[]; popularItemIds: PopularItem[] }) {
   const [cart, dispatch] = useReducer(ticketReducer, EMPTY_CART);
   const [selectedCategory, setSelectedCategory] = useState(
-    () => items[0]?.category ?? "",
+    () => items.some((item) => item.category === "Milk Tea") ? "Milk Tea" : items[0]?.category ?? "",
   );
   const [customerName, setCustomerName] = useState("");
   const [orderType, setOrderType] = useState<"dine_in" | "takeaway">("takeaway");
@@ -202,9 +205,15 @@ export default function OrderScreen({ items, popularItemIds }: { items: MenuItem
     categoryItems.push(item);
     itemsByCategory.set(item.category, categoryItems);
   }
-  const categories = Array.from(itemsByCategory.keys());
+  const categoryPriority = ["Milk Tea", "Drinks", "Burgers", "Sides", "Combos", "Add-ons"];
+  const categories = Array.from(itemsByCategory.keys()).sort((a, b) => {
+    const aPriority = categoryPriority.indexOf(a);
+    const bPriority = categoryPriority.indexOf(b);
+    return (aPriority < 0 ? categoryPriority.length : aPriority) - (bPriority < 0 ? categoryPriority.length : bPriority) || a.localeCompare(b);
+  });
   const normalizedQuery = searchQuery.trim();
   const visibleItems = searchMenuItems(items, itemsByCategory.get(selectedCategory) ?? [], searchQuery);
+  const displayCards = groupMilkTeaSizes(visibleItems);
   const popularItems = popularItemIds.flatMap((popular) => {
     const item = items.find((menuItem) => menuItem.id === popular.id);
     return item ? [{ item, quantity: popular.quantity }] : [];
@@ -218,11 +227,12 @@ export default function OrderScreen({ items, popularItemIds }: { items: MenuItem
             <h2 className="text-lg font-semibold text-roast">Menu</h2>
             <p className="text-right text-sm text-muted">{normalizedQuery ? `${visibleItems.length} matching items` : "Choose a category"}</p>
           </div>
-          <p className="mb-4 text-sm text-muted">Add-ons are separate ticket lines. Use item notes to say which drink or burger they go with, and to record combo choices.</p>
+          {!normalizedQuery && selectedCategory === "Add-ons" && <p className="mb-4 rounded-xl bg-counter px-4 py-3 text-sm text-muted">Add an extra, then use its item note to say which burger or milk tea it goes with.</p>}
+          {!normalizedQuery && selectedCategory === "Combos" && <p className="mb-4 rounded-xl bg-counter px-4 py-3 text-sm text-muted">Add a note with the burger and milk tea choices for each combo.</p>}
 
           <label htmlFor="menu-search" className="sr-only">Search menu</label>
           <div className="mb-5 flex gap-2">
-            <input id="menu-search" type="search" value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder="Search drinks and pastries" className="min-h-14 min-w-0 flex-1 rounded-xl border border-roast/20 bg-counter px-4 text-base outline-none placeholder:text-muted focus:border-pistachio focus:ring-2 focus:ring-pistachio/20" />
+            <input id="menu-search" type="search" value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder="Search the menu" className="min-h-14 min-w-0 flex-1 rounded-xl border border-roast/20 bg-counter px-4 text-base outline-none placeholder:text-muted focus:border-pistachio focus:ring-2 focus:ring-pistachio/20" />
             {searchQuery && <button type="button" onClick={() => setSearchQuery("")} className="min-h-14 min-w-16 rounded-xl border border-roast/20 bg-counter px-4 font-semibold">Clear</button>}
           </div>
 
@@ -264,8 +274,22 @@ export default function OrderScreen({ items, popularItemIds }: { items: MenuItem
             >
               {normalizedQuery ? "Search results" : selectedCategory}
             </h3>
-            {visibleItems.length === 0 ? <p className="rounded-2xl border border-dashed border-roast/20 bg-counter p-8 text-center text-muted">No menu items match “{searchQuery.trim()}”. Try another search.</p> : <div className="grid grid-cols-2 gap-3 sm:gap-4 md:grid-cols-3">
-              {visibleItems.map((item) => {
+            {displayCards.length === 0 ? <p className="rounded-2xl border border-dashed border-roast/20 bg-counter p-8 text-center text-muted">No menu items match “{searchQuery.trim()}”. Try another search.</p> : <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4 md:grid-cols-3">
+              {displayCards.map((card) => {
+                if (card.kind === "milk-tea") {
+                  return <article key={`milk-tea-${card.flavor}`} className="min-w-0 rounded-2xl border border-roast/15 bg-counter p-4 text-roast sm:p-5">
+                    <h4 className="mb-4 min-h-7 text-base font-semibold leading-snug sm:text-lg">{card.flavor}</h4>
+                    <div className="grid grid-cols-2 gap-2">{card.sizes.map((item) => {
+                      const quantity = cart[item.id]?.quantity ?? 0;
+                      const size = item.name.match(/\((\d+) oz\)$/)?.[1] ?? "";
+                      return <button key={item.id} type="button" aria-label={`Add ${card.flavor}, ${size} ounces, to order`} disabled={isSaving || !cartRestored || quantity >= 99} onClick={() => updateTicket({ type: "add", item })} className="relative flex min-h-14 touch-manipulation flex-col items-center justify-center rounded-xl border border-roast/20 px-2 py-2 text-sm font-semibold hover:border-pistachio focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-pistachio disabled:opacity-50">
+                        <span>{size} oz</span><span className="mt-0.5 tabular-nums">{formatPeso(item.price_centavos)}</span>
+                        {quantity > 0 && <span className="absolute -right-2 -top-2 inline-flex h-6 min-w-6 items-center justify-center rounded-full bg-pistachio px-1 text-xs text-counter">{quantity}</span>}
+                      </button>;
+                    })}</div>
+                  </article>;
+                }
+                const { item } = card;
                 const quantity = cart[item.id]?.quantity ?? 0;
                 const quantityLimitReached = quantity >= 99;
 
@@ -351,6 +375,30 @@ export default function OrderScreen({ items, popularItemIds }: { items: MenuItem
       </div>
     </>
   );
+}
+
+function groupMilkTeaSizes(items: MenuItem[]): MenuDisplayCard[] {
+  const cards: MenuDisplayCard[] = [];
+  const flavorCards = new Map<string, Extract<MenuDisplayCard, { kind: "milk-tea" }>>();
+
+  for (const item of items) {
+    const match = item.category === "Milk Tea" ? item.name.match(/^(.*) \((?:12|16) oz\)$/) : null;
+    if (!match) {
+      cards.push({ kind: "item", item });
+      continue;
+    }
+
+    const flavor = match[1].replace(/^Milk Tea - /, "");
+    let card = flavorCards.get(flavor);
+    if (!card) {
+      card = { kind: "milk-tea", flavor, sizes: [] };
+      flavorCards.set(flavor, card);
+      cards.push(card);
+    }
+    card.sizes.push(item);
+  }
+
+  return cards;
 }
 
 function TicketPanel({
