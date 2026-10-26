@@ -253,7 +253,7 @@ export default function OrderScreen({ items, addons }: { items: MenuItem[]; addo
 
   return (
     <>
-      <div className="grid gap-8 pb-32 lg:grid-cols-[minmax(0,1fr)_22rem] lg:items-start lg:pb-0">
+      <div className="grid gap-8 pb-32 lg:grid-cols-[minmax(0,1fr)_25rem] lg:items-start lg:pb-0 2xl:grid-cols-[minmax(0,1fr)_27rem]">
         <div className="min-w-0">
           <div className="mb-5 flex items-end justify-between gap-4">
             <h2 className="text-lg font-semibold text-roast">Menu</h2>
@@ -348,7 +348,7 @@ export default function OrderScreen({ items, addons }: { items: MenuItem[]; addo
         <aside
           id="order-ticket"
           aria-labelledby="ticket-heading"
-          className="relative overflow-hidden rounded-2xl border border-roast/15 bg-sticky p-5 text-roast shadow-[0_8px_18px_rgba(43,33,28,0.12)] lg:sticky lg:top-6"
+          className="relative overflow-hidden rounded-2xl border border-roast/15 bg-sticky p-5 text-roast shadow-[0_8px_18px_rgba(43,33,28,0.12)] lg:sticky lg:top-6 lg:p-6"
         >
           <span aria-hidden="true" className="pointer-events-none absolute right-0 top-0 h-8 w-8 bg-[linear-gradient(225deg,var(--steam)_0_49%,rgba(43,33,28,0.12)_50%,transparent_54%)]" />
           {saveFeedback?.kind === "success" && (
