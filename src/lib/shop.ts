@@ -1,1 +1,1 @@
-export const SHOP_NAME = "Coffee Shop";
+export const SHOP_NAME = "MariTea's";

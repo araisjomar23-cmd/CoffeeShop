@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400" role="img" aria-labelledby="title description">
+  <title id="title">MariTea's Burgers &amp; Milk Tea</title>
+  <desc id="description">A milk tea cup above the MariTea's wordmark, surrounded by a golden circle.</desc>
+  <defs>
+    <linearGradient id="tea" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#f1d58b" />
+      <stop offset="1" stop-color="#a47734" />
+    </linearGradient>
+    <path id="bottom-curve" d="M 52 221 A 153 153 0 0 0 348 221" />
+  </defs>
+  <path d="M31 151 A172 172 0 0 1 369 151" fill="none" stroke="#e5b31b" stroke-width="7" stroke-linecap="round" />
+  <path d="M35 250 A172 172 0 0 0 365 250" fill="none" stroke="#e5b31b" stroke-width="7" stroke-linecap="round" />
+  <g stroke="#171513" stroke-linejoin="round">
+    <path d="M203 39v41c0 10 7 16 17 16h18" fill="none" stroke="#171513" stroke-width="8" stroke-linecap="round" />
+    <path d="M203 43v37c0 8 7 13 16 13h16" fill="none" stroke="#e5b31b" stroke-width="4" stroke-linecap="round" />
+    <path d="M158 101c8-19 28-27 52-27s44 8 52 27l-4 18h-96z" fill="#171513" stroke-width="5" />
+    <path d="M163 105h94v75c0 27-19 48-47 48s-47-21-47-48z" fill="url(#tea)" stroke-width="5" />
+    <path d="M159 111h102" fill="none" stroke="#fff" stroke-width="10" />
+    <path d="M153 112c-1-10 4-15 14-17h92c10 2 15 7 14 17l-4 12H157z" fill="#171513" stroke-width="4" />
+    <path d="M171 132h78" fill="none" stroke="#fff" stroke-width="5" />
+    <g fill="#171513" stroke="none">
+      <circle cx="179" cy="173" r="5"/><circle cx="201" cy="165" r="5"/><circle cx="224" cy="174" r="5"/><circle cx="243" cy="163" r="5"/>
+      <circle cx="186" cy="197" r="6"/><circle cx="209" cy="190" r="6"/><circle cx="232" cy="199" r="6"/>
+    </g>
+  </g>
+  <text x="200" y="228" text-anchor="middle" fill="#111" font-family="'Brush Script MT','Segoe Script',cursive" font-size="72" font-style="italic" font-weight="700" letter-spacing="-5">MariTea's</text>
+  <text fill="#171513" font-family="Arial,sans-serif" font-size="17" font-weight="700" letter-spacing="5">
+    <textPath href="#bottom-curve" startOffset="50%" text-anchor="middle">BURGERS &amp; MILK TEA</textPath>
+  </text>
+</svg>

@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { connection } from "next/server";
 import { Suspense } from "react";
+import Image from "next/image";
 import PasswordInput from "@/components/PasswordInput";
 import { signIn } from "@/app/auth-actions";
 import { createClient } from "@/lib/supabase/server";
@@ -42,7 +43,10 @@ async function LoginContent({ searchParams }: LoginPageProps) {
   return (
     <main className="flex min-h-screen items-center justify-center bg-steam px-4 py-10 text-roast">
       <section className="w-full max-w-md rounded-3xl border border-roast/10 bg-counter p-6 shadow-sm sm:p-8">
-        <p className="text-sm font-semibold uppercase tracking-[0.14em] text-muted">Coffee Shop POS</p>
+        <div className="flex justify-center">
+          <Image src="/mariteas-logo.svg" alt="MariTea’s Burgers & Milk Tea" width={240} height={240} className="mb-2 h-48 w-48 object-contain" priority />
+        </div>
+        <p className="text-center text-sm font-semibold uppercase tracking-[0.14em] text-muted">MariTea&apos;s POS</p>
         <h1 className="mt-2 font-display text-4xl">Staff sign in</h1>
         <p className="mt-3 text-muted">Sign in with the account provided by the shop owner.</p>
         {message && <p role="alert" className="mt-5 rounded-xl border border-error/30 bg-steam p-3 text-sm font-semibold text-error">{message}</p>}
