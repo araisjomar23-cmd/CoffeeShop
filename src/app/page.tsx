@@ -9,7 +9,7 @@ import RouteLoading from "@/components/RouteLoading";
 import type { Tables } from "@/types/database";
 
 type MenuItem = Tables<"menu_items">;
-type MenuResult = { items: MenuItem[]; addons: MenuItem[]; popularItemIds: { id: string; quantity: number }[]; errorMessage: string | null };
+type MenuResult = { items: MenuItem[]; addons: MenuItem[]; errorMessage: string | null };
 
 export default function HomePage() {
   return (
@@ -44,7 +44,7 @@ async function AuthorizedHomePage() {
 }
 
 async function MenuItems() {
-  const { items, addons, popularItemIds, errorMessage } = await loadMenuItems();
+  const { items, addons, errorMessage } = await loadMenuItems();
 
   if (errorMessage) {
     return <MenuError message={errorMessage} />;
@@ -58,53 +58,27 @@ async function MenuItems() {
     );
   }
 
-  return <OrderScreen items={items} addons={addons} popularItemIds={popularItemIds} />;
+  return <OrderScreen items={items} addons={addons} />;
 }
 
 async function loadMenuItems(): Promise<MenuResult> {
   try {
     const supabase = await createClient();
-    const [menuResult, recentOrdersResult] = await Promise.all([
-      supabase.from("menu_items").select("*").eq("is_active", true).order("category", { ascending: true }).order("name", { ascending: true }),
-      supabase.from("orders").select("order_items(menu_item_id, quantity)").gte("order_date", shiftDate(manilaToday(), -6)).neq("status", "cancelled"),
-    ]);
+    const menuResult = await supabase.from("menu_items").select("*").eq("is_active", true).order("category", { ascending: true }).order("name", { ascending: true });
 
-    if (menuResult.error) return { items: [], addons: [], popularItemIds: [], errorMessage: menuResult.error.message };
+    if (menuResult.error) return { items: [], addons: [], errorMessage: menuResult.error.message };
 
     const addons = (menuResult.data ?? []).filter((item) => item.category === "Add-ons");
     const items = (menuResult.data ?? []).filter((item) => item.category !== "Add-ons");
 
-    const itemCounts = new Map<string, number>();
-    for (const order of recentOrdersResult.data ?? []) {
-      for (const orderItem of order.order_items) {
-        if (orderItem.menu_item_id) itemCounts.set(orderItem.menu_item_id, (itemCounts.get(orderItem.menu_item_id) ?? 0) + orderItem.quantity);
-      }
-    }
-    const popularItemIds = Array.from(itemCounts, ([id, quantity]) => ({ id, quantity }))
-      .sort((a, b) => b.quantity - a.quantity)
-      .slice(0, 6);
-
-    return { items, addons, popularItemIds, errorMessage: null };
+    return { items, addons, errorMessage: null };
   } catch (error) {
     return {
       items: [],
       addons: [],
-      popularItemIds: [],
       errorMessage: error instanceof Error ? error.message : "Unknown error",
     };
   }
-}
-
-function manilaToday() {
-  const parts = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Manila", year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(new Date());
-  const part = (type: "year" | "month" | "day") => parts.find((entry) => entry.type === type)?.value ?? "";
-  return part("year") + "-" + part("month") + "-" + part("day");
-}
-
-function shiftDate(value: string, amount: number) {
-  const date = new Date(value + "T12:00:00Z");
-  date.setUTCDate(date.getUTCDate() + amount);
-  return date.toISOString().slice(0, 10);
 }
 
 function MenuError({ message }: { message: string }) {

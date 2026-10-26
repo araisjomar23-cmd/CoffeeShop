@@ -12,6 +12,7 @@ import RouteLoading from "@/components/RouteLoading";
 type Order = Tables<"orders">;
 type OrderItem = Tables<"order_items">;
 type OrderWithItems = Order & { order_items: Pick<OrderItem, "item_name" | "quantity" | "note">[] };
+type WeeklyOrder = { order_items: Pick<OrderItem, "item_name" | "quantity">[] };
 type SearchParams = Promise<Record<string, string | string[] | undefined>>;
 
 export default function SummaryPage({ searchParams }: { searchParams: SearchParams }) {
@@ -58,16 +59,27 @@ async function SummaryContent({ searchParams }: { searchParams: SearchParams }) 
   const nextDate = shiftDate(date, 1);
 
   let orders: OrderWithItems[];
+  let weeklyOrders: WeeklyOrder[];
   try {
     const supabase = await createClient();
-    const { data, error } = await supabase
-      .from("orders")
-      .select("id, order_date, order_number, customer_name, status, total_centavos, created_at, order_type, payment_method, cash_received_centavos, change_centavos, cancellation_reason, order_items(item_name, quantity, note)")
-      .eq("order_date", date)
-      .order("created_at", { ascending: false });
+    const [dailyResult, weeklyResult] = await Promise.all([
+      supabase
+        .from("orders")
+        .select("id, order_date, order_number, customer_name, status, total_centavos, created_at, order_type, payment_method, cash_received_centavos, change_centavos, cancellation_reason, order_items(item_name, quantity, note)")
+        .eq("order_date", date)
+        .order("created_at", { ascending: false }),
+      supabase
+        .from("orders")
+        .select("order_items(item_name, quantity)")
+        .gte("order_date", shiftDate(today, -6))
+        .lte("order_date", today)
+        .neq("status", "cancelled"),
+    ]);
 
-    if (error) throw error;
-    orders = (data ?? []) as OrderWithItems[];
+    if (dailyResult.error) throw dailyResult.error;
+    if (weeklyResult.error) throw weeklyResult.error;
+    orders = (dailyResult.data ?? []) as OrderWithItems[];
+    weeklyOrders = (weeklyResult.data ?? []) as WeeklyOrder[];
   } catch {
     return (
       <p role="alert" className="rounded-2xl border border-error/30 bg-counter p-6 font-semibold text-error">
@@ -98,6 +110,15 @@ async function SummaryContent({ searchParams }: { searchParams: SearchParams }) 
   const rankedItems = Array.from(bestSellers, ([name, quantity]) => ({ name, quantity }))
     .sort((a, b) => b.quantity - a.quantity || a.name.localeCompare(b.name))
     .slice(0, 5);
+  const weeklyBestSellers = new Map<string, number>();
+  for (const order of weeklyOrders) {
+    for (const item of order.order_items) {
+      weeklyBestSellers.set(item.item_name, (weeklyBestSellers.get(item.item_name) ?? 0) + item.quantity);
+    }
+  }
+  const weeklyRankedItems = Array.from(weeklyBestSellers, ([name, quantity]) => ({ name, quantity }))
+    .sort((a, b) => b.quantity - a.quantity || a.name.localeCompare(b.name))
+    .slice(0, 6);
 
   return (
     <>
@@ -140,6 +161,26 @@ async function SummaryContent({ searchParams }: { searchParams: SearchParams }) 
           <PaymentTile label="Cashless (GCash)" amount={paymentTotals.e_wallet} />
           <PaymentTile label="Unrecorded" amount={paymentTotals.unrecorded} />
         </dl>
+      </section>
+
+      <section aria-labelledby="popular-week-heading" className="mb-8 rounded-2xl border border-roast/10 bg-counter p-5 sm:p-6">
+        <div className="flex flex-wrap items-baseline justify-between gap-2">
+          <h2 id="popular-week-heading" className="font-display text-2xl">Popular this week</h2>
+          <p className="text-sm text-muted">Based on the last 7 days</p>
+        </div>
+        {weeklyRankedItems.length === 0 ? (
+          <p className="mt-4 text-muted">No items sold in the last 7 days.</p>
+        ) : (
+          <ol className="mt-4 divide-y divide-roast/10">
+            {weeklyRankedItems.map((item, index) => (
+              <li key={item.name} className="flex min-h-12 items-center gap-4 py-2">
+                <span className="w-8 font-display text-xl text-muted">{index + 1}</span>
+                <span className="flex-1 font-semibold">{item.name}</span>
+                <span className="tabular-nums text-muted">{item.quantity} sold</span>
+              </li>
+            ))}
+          </ol>
+        )}
       </section>
 
       <section aria-labelledby="best-sellers-heading" className="mb-8 rounded-2xl border border-roast/10 bg-counter p-5 sm:p-6">

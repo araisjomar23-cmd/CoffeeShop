@@ -3,7 +3,7 @@
 import { useEffect, useReducer, useRef, useState } from "react";
 import { createOrder } from "@/app/actions";
 import { formatPeso } from "@/lib/money";
-import { calculateTicketTotal, cartLineKey, isAddonAllowed, restoreTicketSnapshot, searchMenuItems } from "@/lib/order-ticket";
+import { calculateTicketTotal, cartLineKey, isAddonAllowed, restoreTicketSnapshot } from "@/lib/order-ticket";
 import type { Tables } from "@/types/database";
 
 type MenuItem = Tables<"menu_items">;
@@ -28,8 +28,6 @@ type TicketAction =
   | { type: "set_note"; id: string; note: string }
   | { type: "restore"; cart: Cart }
   | { type: "clear" };
-
-type PopularItem = { id: string; quantity: number };
 
 const EMPTY_CART: Cart = {};
 
@@ -84,7 +82,7 @@ function ticketReducer(cart: Cart, action: TicketAction): Cart {
   }
 }
 
-export default function OrderScreen({ items, addons, popularItemIds }: { items: MenuItem[]; addons: MenuItem[]; popularItemIds: PopularItem[] }) {
+export default function OrderScreen({ items, addons }: { items: MenuItem[]; addons: MenuItem[] }) {
   const [cart, dispatch] = useReducer(ticketReducer, EMPTY_CART);
   const [selectedCategory, setSelectedCategory] = useState(
     () => items.some((item) => item.category === "Coffee") ? "Coffee" : items.some((item) => item.category === "Milk Tea") ? "Milk Tea" : items[0]?.category ?? "",
@@ -92,7 +90,6 @@ export default function OrderScreen({ items, addons, popularItemIds }: { items: 
   const [customerName, setCustomerName] = useState("");
   const [orderType, setOrderType] = useState<"dine_in" | "takeaway">("takeaway");
   const [paymentMethod, setPaymentMethod] = useState<"cash" | "e_wallet">("cash");
-  const [searchQuery, setSearchQuery] = useState("");
   const [cartRestored, setCartRestored] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [saveFeedback, setSaveFeedback] = useState<SaveFeedback | null>(null);
@@ -251,13 +248,8 @@ export default function OrderScreen({ items, addons, popularItemIds }: { items: 
     const bPriority = categoryPriority.indexOf(b);
     return (aPriority < 0 ? categoryPriority.length : aPriority) - (bPriority < 0 ? categoryPriority.length : bPriority) || a.localeCompare(b);
   });
-  const normalizedQuery = searchQuery.trim();
-  const visibleItems = searchMenuItems(items, itemsByCategory.get(selectedCategory) ?? [], searchQuery);
+  const visibleItems = itemsByCategory.get(selectedCategory) ?? [];
   const displayCards = groupSizedDrinks(visibleItems);
-  const popularItems = popularItemIds.flatMap((popular) => {
-    const item = items.find((menuItem) => menuItem.id === popular.id);
-    return item ? [{ item, quantity: popular.quantity }] : [];
-  });
 
   return (
     <>
@@ -265,28 +257,17 @@ export default function OrderScreen({ items, addons, popularItemIds }: { items: 
         <div className="min-w-0">
           <div className="mb-5 flex items-end justify-between gap-4">
             <h2 className="text-lg font-semibold text-roast">Menu</h2>
-            <p className="text-right text-sm text-muted">{normalizedQuery ? `${visibleItems.length} matching items` : "Choose a category"}</p>
+            <p className="text-right text-sm text-muted">Choose a category</p>
           </div>
-          {!normalizedQuery && selectedCategory === "Add-ons" && <p className="mb-4 rounded-xl bg-counter px-4 py-3 text-sm text-muted">Add an extra, then use its item note to say which burger or milk tea it goes with.</p>}
-          {!normalizedQuery && selectedCategory === "Combos" && <p className="mb-4 rounded-xl bg-counter px-4 py-3 text-sm text-muted">Add a note with the burger and milk tea choices for each combo.</p>}
-
-          <label htmlFor="menu-search" className="sr-only">Search menu</label>
-          <div className="mb-5 flex gap-2">
-            <input id="menu-search" type="search" value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder="Search the menu" className="min-h-14 min-w-0 flex-1 rounded-xl border border-roast/20 bg-counter px-4 text-base outline-none placeholder:text-muted focus:border-pistachio focus:ring-2 focus:ring-pistachio/20" />
-            {searchQuery && <button type="button" onClick={() => setSearchQuery("")} className="min-h-14 min-w-16 rounded-xl border border-roast/20 bg-counter px-4 font-semibold">Clear</button>}
-          </div>
-
-          {popularItems.length > 0 && !normalizedQuery && <section aria-labelledby="popular-items-heading" className="mb-6">
-            <div className="mb-3 flex items-baseline justify-between gap-3"><h3 id="popular-items-heading" className="font-display text-2xl">Popular this week</h3><p className="text-xs text-muted">Based on the last 7 days</p></div>
-            <div className="flex gap-3 overflow-x-auto pb-2">{popularItems.map(({ item, quantity }) => <button key={item.id} type="button" onClick={() => beginAddItem(item)} disabled={isSaving || !cartRestored || productQuantity(cart, item.id) >= 99} className="flex min-h-16 min-w-40 touch-manipulation flex-col justify-center rounded-xl border border-roast/15 bg-counter px-4 text-left hover:border-pistachio focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-pistachio disabled:opacity-50"><span className="font-semibold">{item.name}</span><span className="mt-1 text-xs text-muted">{quantity} sold · {formatPeso(item.price_centavos)}</span></button>)}</div>
-          </section>}
+          {selectedCategory === "Add-ons" && <p className="mb-4 rounded-xl bg-counter px-4 py-3 text-sm text-muted">Add an extra, then use its item note to say which burger or milk tea it goes with.</p>}
+          {selectedCategory === "Combos" && <p className="mb-4 rounded-xl bg-counter px-4 py-3 text-sm text-muted">Add a note with the burger and milk tea choices for each combo.</p>}
 
           <div
             role="group"
             aria-label="Menu categories"
             className="mb-6 flex gap-3 overflow-x-auto pb-1"
           >
-              {!normalizedQuery && categories.map((category) => {
+              {categories.map((category) => {
               const isSelected = category === selectedCategory;
 
               return (
@@ -312,9 +293,9 @@ export default function OrderScreen({ items, addons, popularItemIds }: { items: 
               id="selected-category-heading"
               className="mb-4 font-display text-2xl text-roast sm:text-3xl"
             >
-              {normalizedQuery ? "Search results" : selectedCategory}
+              {selectedCategory}
             </h3>
-            {displayCards.length === 0 ? <p className="rounded-2xl border border-dashed border-roast/20 bg-counter p-8 text-center text-muted">No menu items match “{searchQuery.trim()}”. Try another search.</p> : <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4 md:grid-cols-3">
+            {displayCards.length === 0 ? <p className="rounded-2xl border border-dashed border-roast/20 bg-counter p-8 text-center text-muted">No items in this category yet.</p> : <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4 md:grid-cols-3">
               {displayCards.map((card) => {
                 if (card.kind === "sized-drink") {
                   return <article key={`sized-drink-${card.name}`} className="min-w-0 rounded-2xl border border-roast/15 bg-counter p-4 text-roast sm:p-5">
