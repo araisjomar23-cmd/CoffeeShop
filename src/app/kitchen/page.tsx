@@ -15,6 +15,7 @@ import type { Tables } from "@/types/database";
 
 type KitchenOrder = Pick<Tables<"orders">, "id" | "order_number" | "status" | "created_at" | "customer_name" | "order_type" | "total_centavos">
   & { order_items: Pick<Tables<"order_items">, "id" | "item_name" | "unit_price_centavos" | "quantity" | "note">[] };
+type MenuOption = Pick<Tables<"menu_items">, "id" | "name" | "category" | "price_centavos">;
 
 export default async function KitchenPage() {
   return <Suspense fallback={<RouteLoading screen="kitchen" title="Preparation queue" />}><AuthorizedKitchenPage /></Suspense>;
@@ -25,18 +26,25 @@ async function AuthorizedKitchenPage() {
   const role = await requireStaffRole();
   const today = manilaToday();
   let orders: KitchenOrder[] = [];
+  let menuItems: MenuOption[] = [];
+  let addons: MenuOption[] = [];
   let loadFailed = false;
   try {
     const supabase = await createClient();
-    const { data, error } = await supabase
-      .from("orders")
-      .select("id, order_number, status, created_at, customer_name, order_type, total_centavos, order_items(id, item_name, unit_price_centavos, quantity, note)")
-      .eq("order_date", today)
-      .neq("status", "cancelled")
-      .order("created_at", { ascending: false })
-      .order("order_number", { ascending: false });
-    if (error) throw error;
-    orders = (data ?? []) as KitchenOrder[];
+    const [ordersResult, menuResult] = await Promise.all([
+      supabase.from("orders")
+        .select("id, order_number, status, created_at, customer_name, order_type, total_centavos, order_items(id, item_name, unit_price_centavos, quantity, note)")
+        .eq("order_date", today)
+        .neq("status", "cancelled")
+        .order("created_at", { ascending: false })
+        .order("order_number", { ascending: false }),
+      supabase.from("menu_items").select("id, name, category, price_centavos").eq("is_active", true).order("category").order("name"),
+    ]);
+    if (ordersResult.error) throw ordersResult.error;
+    if (menuResult.error) throw menuResult.error;
+    orders = (ordersResult.data ?? []) as KitchenOrder[];
+    addons = (menuResult.data ?? []).filter((item) => item.category === "Add-ons");
+    menuItems = (menuResult.data ?? []).filter((item) => item.category !== "Add-ons");
   } catch {
     loadFailed = true;
   }
@@ -58,11 +66,11 @@ async function AuthorizedKitchenPage() {
           <>
             <section aria-labelledby="active-orders-heading">
               <div className="mb-4 flex items-end justify-between gap-3"><div><h2 id="active-orders-heading" className="font-display text-3xl">Active orders</h2><p className="mt-1 text-sm text-muted">{activeOrders.length} waiting or in preparation</p></div><Link href="/" className="inline-flex min-h-12 items-center rounded-xl border border-roast/20 bg-counter px-4 font-semibold">New order</Link></div>
-              {activeOrders.length === 0 ? <p className="rounded-2xl border border-dashed border-roast/20 bg-counter p-8 text-center text-muted">No orders waiting for preparation.</p> : <ul className="grid gap-4 lg:grid-cols-2">{activeOrders.map((order) => <KitchenOrderCard key={order.id} order={order} role={role} />)}</ul>}
+              {activeOrders.length === 0 ? <p className="rounded-2xl border border-dashed border-roast/20 bg-counter p-8 text-center text-muted">No orders waiting for preparation.</p> : <ul className="grid gap-4 lg:grid-cols-2">{activeOrders.map((order) => <KitchenOrderCard key={order.id} order={order} role={role} menuItems={menuItems} addons={addons} />)}</ul>}
             </section>
             <section aria-labelledby="completed-orders-heading" className="mt-10">
               <h2 id="completed-orders-heading" className="mb-4 font-display text-2xl">Completed today</h2>
-              {completedOrders.length === 0 ? <p className="rounded-2xl border border-dashed border-roast/20 bg-counter p-6 text-muted">No completed orders yet.</p> : <ul className="grid gap-3 lg:grid-cols-2">{completedOrders.map((order) => <KitchenOrderCard key={order.id} order={order} role={role} compact />)}</ul>}
+              {completedOrders.length === 0 ? <p className="rounded-2xl border border-dashed border-roast/20 bg-counter p-6 text-muted">No completed orders yet.</p> : <ul className="grid gap-3 lg:grid-cols-2">{completedOrders.map((order) => <KitchenOrderCard key={order.id} order={order} role={role} menuItems={menuItems} addons={addons} compact />)}</ul>}
             </section>
           </>
         )}
@@ -71,7 +79,7 @@ async function AuthorizedKitchenPage() {
   );
 }
 
-function KitchenOrderCard({ order, role, compact = false }: { order: KitchenOrder; role: StaffRole; compact?: boolean }) {
+function KitchenOrderCard({ order, role, menuItems, addons, compact = false }: { order: KitchenOrder; role: StaffRole; menuItems: MenuOption[]; addons: MenuOption[]; compact?: boolean }) {
   return (
     <li className={`rounded-2xl border bg-counter p-5 ${order.status === "new" ? "border-caramel/60" : "border-roast/10"}`}>
       <div className="flex items-start justify-between gap-3">
@@ -81,7 +89,7 @@ function KitchenOrderCard({ order, role, compact = false }: { order: KitchenOrde
       <ul className="mt-4 divide-y divide-roast/10">{order.order_items.map((item, index) => <li key={`${item.item_name}-${index}`} className="py-3"><p className="font-semibold"><span className="mr-2 text-muted">{item.quantity}×</span>{item.item_name}</p>{item.note && <p className="mt-1 pl-7 text-sm text-muted">Note: {item.note}</p>}</li>)}</ul>
       {!compact && <p className="mt-3 border-t border-roast/10 pt-3 text-right font-semibold tabular-nums">{formatPeso(order.total_centavos)}</p>}
       <KitchenOrderActions orderId={order.id} status={order.status} />
-      {!compact && <div className="mt-2 flex flex-wrap items-center gap-4"><EditActiveOrder orderId={order.id} orderNumber={order.order_number} customerName={order.customer_name} orderType={order.order_type === "dine_in" ? "dine_in" : "takeaway"} items={order.order_items.map((item) => ({ id: item.id, name: item.item_name, unitPriceCentavos: item.unit_price_centavos, quantity: item.quantity, note: item.note ?? "" }))} />{role === "owner" && <CancelOrderForm orderId={order.id} />}</div>}
+      {!compact && <div className="mt-2 flex flex-wrap items-center gap-4"><EditActiveOrder orderId={order.id} orderNumber={order.order_number} customerName={order.customer_name} orderType={order.order_type === "dine_in" ? "dine_in" : "takeaway"} items={order.order_items.map((item) => ({ id: item.id, name: item.item_name, unitPriceCentavos: item.unit_price_centavos, quantity: item.quantity, note: item.note ?? "" }))} menuItems={menuItems} addons={addons} />{role === "owner" && <CancelOrderForm orderId={order.id} />}</div>}
     </li>
   );
 }

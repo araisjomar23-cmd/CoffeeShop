@@ -13,7 +13,7 @@ type OrderItemInput = {
 
 type OrderType = "dine_in" | "takeaway";
 type PaymentMethod = "cash" | "e_wallet";
-type EditOrderItemInput = { order_item_id: string; quantity: number; note: string };
+type EditOrderItemInput = { order_item_id?: string; menu_item_id?: string; quantity: number; note: string; addon_ids?: string[] };
 
 const UUID_PATTERN = /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i;
 
@@ -154,16 +154,36 @@ export async function editActiveOrder(
   if (orderType !== "dine_in" && orderType !== "takeaway") {
     return { ok: false, error: "Choose dine-in or takeaway." };
   }
-  if (!Array.isArray(items) || items.length === 0 || items.length > 50) {
-    return { ok: false, error: "An order must contain between 1 and 50 items." };
+  if (!Array.isArray(items) || items.length === 0 || items.length > 100) {
+    return { ok: false, error: "The order edit contains too many lines." };
   }
   const seenIds = new Set<string>();
+  const seenNewLines = new Set<string>();
   for (const item of items) {
-    if (!item || typeof item.order_item_id !== "string" || !UUID_PATTERN.test(item.order_item_id) || seenIds.has(item.order_item_id)) {
-      return { ok: false, error: "Each edited item must have a unique, valid ID." };
+    if (!item || typeof item !== "object") {
+      return { ok: false, error: "Each edited item is invalid." };
     }
-    seenIds.add(item.order_item_id);
-    if (!Number.isInteger(item.quantity) || item.quantity < 0 || item.quantity > 99) {
+    const isExistingItem = typeof item.order_item_id === "string";
+    const isNewItem = typeof item.menu_item_id === "string";
+    if (isExistingItem === isNewItem) {
+      return { ok: false, error: "Each item must be an existing order line or a new menu item." };
+    }
+    if (isExistingItem) {
+      if (!UUID_PATTERN.test(item.order_item_id!) || seenIds.has(item.order_item_id!)) {
+        return { ok: false, error: "Each edited item must have a unique, valid ID." };
+      }
+      seenIds.add(item.order_item_id!);
+    } else {
+      if (!UUID_PATTERN.test(item.menu_item_id!)) return { ok: false, error: "Choose a valid menu item." };
+      const addonIds = item.addon_ids ?? [];
+      if (!Array.isArray(addonIds) || addonIds.length > 3 || addonIds.some((id) => typeof id !== "string" || !UUID_PATTERN.test(id)) || new Set(addonIds).size !== addonIds.length) {
+        return { ok: false, error: "Choose valid, non-duplicate add-ons." };
+      }
+      const signature = `${item.menu_item_id}:${[...addonIds].sort().join(",")}`;
+      if (seenNewLines.has(signature)) return { ok: false, error: "Combine identical new items into one line." };
+      seenNewLines.add(signature);
+    }
+    if (!Number.isInteger(item.quantity) || item.quantity < (isExistingItem ? 0 : 1) || item.quantity > 99) {
       return { ok: false, error: "Item quantities must be between 0 and 99." };
     }
     if (typeof item.note !== "string" || item.note.length > 140) {
