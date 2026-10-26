@@ -1,14 +1,26 @@
 ﻿import { Suspense } from "react";
+import { connection } from "next/server";
 import OrderScreen from "@/components/OrderScreen";
-import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { SHOP_NAME } from "@/lib/shop";
+import { requireStaffRole } from "@/lib/auth";
+import StaffNav from "@/components/StaffNav";
 import type { Tables } from "@/types/database";
 
 type MenuItem = Tables<"menu_items">;
-type MenuResult = { items: MenuItem[]; errorMessage: string | null };
+type MenuResult = { items: MenuItem[]; popularItemIds: { id: string; quantity: number }[]; errorMessage: string | null };
 
 export default function HomePage() {
+  return (
+    <Suspense fallback={<MenuLoading />}>
+      <AuthorizedHomePage />
+    </Suspense>
+  );
+}
+
+async function AuthorizedHomePage() {
+  await connection();
+  const role = await requireStaffRole();
   return (
     <main className="min-h-screen bg-steam text-roast">
       <div className="mx-auto max-w-7xl px-4 py-7 sm:px-6 sm:py-9">
@@ -16,10 +28,7 @@ export default function HomePage() {
           <h1 className="font-display text-4xl leading-tight text-roast sm:text-5xl">
             {SHOP_NAME}
           </h1>
-          <nav aria-label="Main navigation" className="mt-5 flex gap-3">
-            <Link aria-current="page" href="/" className="inline-flex min-h-12 items-center rounded-xl bg-pistachio px-5 font-semibold text-counter">New order</Link>
-            <Link href="/summary" className="inline-flex min-h-12 items-center rounded-xl border border-roast/20 bg-counter px-5 font-semibold text-roast hover:border-pistachio focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-pistachio">Sales</Link>
-          </nav>
+          <StaffNav current="order" role={role} />
           <p className="mt-2 text-base text-muted">
             Tap a category to browse the menu.
           </p>
@@ -34,7 +43,7 @@ export default function HomePage() {
 }
 
 async function MenuItems() {
-  const { items, errorMessage } = await loadMenuItems();
+  const { items, popularItemIds, errorMessage } = await loadMenuItems();
 
   if (errorMessage) {
     return <MenuError message={errorMessage} />;
@@ -48,30 +57,49 @@ async function MenuItems() {
     );
   }
 
-  return <OrderScreen items={items} />;
+  return <OrderScreen items={items} popularItemIds={popularItemIds} />;
 }
 
 async function loadMenuItems(): Promise<MenuResult> {
   try {
     const supabase = await createClient();
-    const { data, error } = await supabase
-      .from("menu_items")
-      .select("*")
-      .eq("is_active", true)
-      .order("category", { ascending: true })
-      .order("name", { ascending: true });
+    const [menuResult, recentOrdersResult] = await Promise.all([
+      supabase.from("menu_items").select("*").eq("is_active", true).order("category", { ascending: true }).order("name", { ascending: true }),
+      supabase.from("orders").select("order_items(menu_item_id, quantity)").gte("order_date", shiftDate(manilaToday(), -6)).neq("status", "cancelled"),
+    ]);
 
-    if (error) {
-      return { items: [], errorMessage: error.message };
+    if (menuResult.error) return { items: [], popularItemIds: [], errorMessage: menuResult.error.message };
+
+    const itemCounts = new Map<string, number>();
+    for (const order of recentOrdersResult.data ?? []) {
+      for (const orderItem of order.order_items) {
+        if (orderItem.menu_item_id) itemCounts.set(orderItem.menu_item_id, (itemCounts.get(orderItem.menu_item_id) ?? 0) + orderItem.quantity);
+      }
     }
+    const popularItemIds = Array.from(itemCounts, ([id, quantity]) => ({ id, quantity }))
+      .sort((a, b) => b.quantity - a.quantity)
+      .slice(0, 6);
 
-    return { items: data, errorMessage: null };
+    return { items: menuResult.data ?? [], popularItemIds, errorMessage: null };
   } catch (error) {
     return {
       items: [],
+      popularItemIds: [],
       errorMessage: error instanceof Error ? error.message : "Unknown error",
     };
   }
+}
+
+function manilaToday() {
+  const parts = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Manila", year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(new Date());
+  const part = (type: "year" | "month" | "day") => parts.find((entry) => entry.type === type)?.value ?? "";
+  return part("year") + "-" + part("month") + "-" + part("day");
+}
+
+function shiftDate(value: string, amount: number) {
+  const date = new Date(value + "T12:00:00Z");
+  date.setUTCDate(date.getUTCDate() + amount);
+  return date.toISOString().slice(0, 10);
 }
 
 function MenuError({ message }: { message: string }) {

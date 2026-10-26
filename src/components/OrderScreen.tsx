@@ -1,22 +1,32 @@
 "use client";
 
-import { useReducer, useState } from "react";
+import { useEffect, useReducer, useRef, useState } from "react";
 import { createOrder } from "@/app/actions";
 import { formatPeso } from "@/lib/money";
+import { calculateTicketTotal, restoreTicketSnapshot, searchMenuItems } from "@/lib/order-ticket";
 import type { Tables } from "@/types/database";
 
 type MenuItem = Tables<"menu_items">;
-type CartLine = { item: MenuItem; quantity: number };
+type CartLine = { item: MenuItem; quantity: number; note: string };
 type Cart = Record<string, CartLine>;
 type SaveFeedback =
-  | { kind: "success"; orderNumber: number }
+  | {
+      kind: "success";
+      orderNumber: number;
+      totalCentavos: number;
+      orderType: "dine_in" | "takeaway";
+    }
   | { kind: "error"; detail: string };
 
 type TicketAction =
   | { type: "add"; item: MenuItem }
   | { type: "increase"; id: string }
   | { type: "decrease"; id: string }
+  | { type: "set_note"; id: string; note: string }
+  | { type: "restore"; cart: Cart }
   | { type: "clear" };
+
+type PopularItem = { id: string; quantity: number };
 
 const EMPTY_CART: Cart = {};
 
@@ -45,6 +55,7 @@ function ticketReducer(cart: Cart, action: TicketAction): Cart {
         [action.item.id]: {
           item: action.item,
           quantity: existingLine ? existingLine.quantity + 1 : 1,
+          note: existingLine?.note ?? "",
         },
       };
     }
@@ -52,32 +63,100 @@ function ticketReducer(cart: Cart, action: TicketAction): Cart {
       return updateQuantity(cart, action.id, 1);
     case "decrease":
       return updateQuantity(cart, action.id, -1);
+    case "set_note":
+      return cart[action.id]
+        ? { ...cart, [action.id]: { ...cart[action.id], note: action.note } }
+        : cart;
+    case "restore":
+      return action.cart;
     case "clear":
       return EMPTY_CART;
   }
 }
 
-export default function OrderScreen({ items }: { items: MenuItem[] }) {
+export default function OrderScreen({ items, popularItemIds }: { items: MenuItem[]; popularItemIds: PopularItem[] }) {
   const [cart, dispatch] = useReducer(ticketReducer, EMPTY_CART);
   const [selectedCategory, setSelectedCategory] = useState(
     () => items[0]?.category ?? "",
   );
   const [customerName, setCustomerName] = useState("");
+  const [orderType, setOrderType] = useState<"dine_in" | "takeaway">("takeaway");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [cartRestored, setCartRestored] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [saveFeedback, setSaveFeedback] = useState<SaveFeedback | null>(null);
+  const didRestore = useRef(false);
+  const requestIdRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (didRestore.current) return;
+    didRestore.current = true;
+    try {
+      const saved = sessionStorage.getItem("coffee-pos-order-ticket-v1");
+      if (saved) {
+        const restored = restoreTicketSnapshot(JSON.parse(saved), items);
+        dispatch({ type: "restore", cart: restored.cart });
+        // Restoring from sessionStorage is an intentional external-to-React state sync.
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+        setCustomerName(restored.customerName);
+        setOrderType(restored.orderType);
+        requestIdRef.current = restored.requestId;
+      }
+    } catch {
+      // Storage can be unavailable in private browsing; the in-memory ticket still works.
+    }
+    setCartRestored(true);
+  }, [items]);
+
+  useEffect(() => {
+    if (!cartRestored) return;
+    try {
+      sessionStorage.setItem("coffee-pos-order-ticket-v1", JSON.stringify({
+        lines: Object.values(cart).map((line) => ({ id: line.item.id, quantity: line.quantity, note: line.note })),
+        customerName,
+        orderType,
+        requestId: requestIdRef.current,
+      }));
+    } catch {
+      // Storage can be unavailable in private browsing; the in-memory ticket still works.
+    }
+  }, [cart, customerName, orderType, cartRestored]);
   const lines = Object.values(cart);
-  const orderTotalCentavos = lines.reduce(
-    (total, line) => total + line.item.price_centavos * line.quantity,
-    0,
-  );
+  const orderTotalCentavos = calculateTicketTotal(lines);
   const itemCount = lines.reduce((count, line) => count + line.quantity, 0);
+  const canSubmit = lines.length > 0 && !isSaving && cartRestored;
 
   function updateTicket(action: TicketAction) {
+    requestIdRef.current = null;
     setSaveFeedback(null);
     dispatch(action);
   }
 
+  function updateCustomerName(name: string) {
+    requestIdRef.current = null;
+    setSaveFeedback(null);
+    setCustomerName(name);
+  }
+
+  function updateOrderType(value: "dine_in" | "takeaway") {
+    requestIdRef.current = null;
+    setSaveFeedback(null);
+    setOrderType(value);
+  }
+
   async function handleSaveOrder() {
+    const requestId = requestIdRef.current ?? crypto.randomUUID();
+    requestIdRef.current = requestId;
+    try {
+      sessionStorage.setItem("coffee-pos-order-ticket-v1", JSON.stringify({
+        lines: lines.map((line) => ({ id: line.item.id, quantity: line.quantity, note: line.note })),
+        customerName,
+        orderType,
+        requestId,
+      }));
+    } catch {
+      // The server still deduplicates during this page session if storage is unavailable.
+    }
     setIsSaving(true);
     setSaveFeedback(null);
 
@@ -86,8 +165,11 @@ export default function OrderScreen({ items }: { items: MenuItem[] }) {
         lines.map((line) => ({
           menu_item_id: line.item.id,
           quantity: line.quantity,
+          note: line.note,
         })),
         customerName,
+        orderType,
+        requestId,
       );
 
       if (!result.ok) {
@@ -96,10 +178,13 @@ export default function OrderScreen({ items }: { items: MenuItem[] }) {
       }
 
       dispatch({ type: "clear" });
+      requestIdRef.current = null;
       setCustomerName("");
       setSaveFeedback({
         kind: "success",
         orderNumber: result.orderNumber,
+        totalCentavos: result.totalCentavos,
+        orderType,
       });
     } catch (error) {
       setSaveFeedback({
@@ -118,7 +203,12 @@ export default function OrderScreen({ items }: { items: MenuItem[] }) {
     itemsByCategory.set(item.category, categoryItems);
   }
   const categories = Array.from(itemsByCategory.keys());
-  const selectedItems = itemsByCategory.get(selectedCategory) ?? [];
+  const normalizedQuery = searchQuery.trim();
+  const visibleItems = searchMenuItems(items, itemsByCategory.get(selectedCategory) ?? [], searchQuery);
+  const popularItems = popularItemIds.flatMap((popular) => {
+    const item = items.find((menuItem) => menuItem.id === popular.id);
+    return item ? [{ item, quantity: popular.quantity }] : [];
+  });
 
   return (
     <>
@@ -126,15 +216,26 @@ export default function OrderScreen({ items }: { items: MenuItem[] }) {
         <div className="min-w-0">
           <div className="mb-5 flex items-end justify-between gap-4">
             <h2 className="text-lg font-semibold text-roast">Menu</h2>
-            <p className="text-sm text-muted">Choose a category</p>
+            <p className="text-sm text-muted">{normalizedQuery ? `${visibleItems.length} matching items` : "Choose a category"}</p>
           </div>
+
+          <label htmlFor="menu-search" className="sr-only">Search menu</label>
+          <div className="mb-5 flex gap-2">
+            <input id="menu-search" type="search" value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder="Search drinks and pastries" className="min-h-14 min-w-0 flex-1 rounded-xl border border-roast/20 bg-counter px-4 text-base outline-none placeholder:text-muted focus:border-pistachio focus:ring-2 focus:ring-pistachio/20" />
+            {searchQuery && <button type="button" onClick={() => setSearchQuery("")} className="min-h-14 min-w-16 rounded-xl border border-roast/20 bg-counter px-4 font-semibold">Clear</button>}
+          </div>
+
+          {popularItems.length > 0 && !normalizedQuery && <section aria-labelledby="popular-items-heading" className="mb-6">
+            <div className="mb-3 flex items-baseline justify-between gap-3"><h3 id="popular-items-heading" className="font-display text-2xl">Popular this week</h3><p className="text-xs text-muted">Based on the last 7 days</p></div>
+            <div className="flex gap-3 overflow-x-auto pb-2">{popularItems.map(({ item, quantity }) => <button key={item.id} type="button" onClick={() => updateTicket({ type: "add", item })} disabled={isSaving || !cartRestored || (cart[item.id]?.quantity ?? 0) >= 99} className="flex min-h-16 min-w-40 touch-manipulation flex-col justify-center rounded-xl border border-roast/15 bg-counter px-4 text-left hover:border-pistachio focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-pistachio disabled:opacity-50"><span className="font-semibold">{item.name}</span><span className="mt-1 text-xs text-muted">{quantity} sold · {formatPeso(item.price_centavos)}</span></button>)}</div>
+          </section>}
 
           <div
             role="group"
             aria-label="Menu categories"
             className="mb-6 flex gap-3 overflow-x-auto pb-1"
           >
-            {categories.map((category) => {
+              {!normalizedQuery && categories.map((category) => {
               const isSelected = category === selectedCategory;
 
               return (
@@ -160,10 +261,10 @@ export default function OrderScreen({ items }: { items: MenuItem[] }) {
               id="selected-category-heading"
               className="mb-4 font-display text-2xl text-roast sm:text-3xl"
             >
-              {selectedCategory}
+              {normalizedQuery ? "Search results" : selectedCategory}
             </h3>
-            <div className="grid grid-cols-2 gap-3 sm:gap-4 md:grid-cols-3">
-              {selectedItems.map((item) => {
+            {visibleItems.length === 0 ? <p className="rounded-2xl border border-dashed border-roast/20 bg-counter p-8 text-center text-muted">No menu items match “{searchQuery.trim()}”. Try another search.</p> : <div className="grid grid-cols-2 gap-3 sm:gap-4 md:grid-cols-3">
+              {visibleItems.map((item) => {
                 const quantity = cart[item.id]?.quantity ?? 0;
                 const quantityLimitReached = quantity >= 99;
 
@@ -176,9 +277,9 @@ export default function OrderScreen({ items }: { items: MenuItem[] }) {
                         ? `Maximum quantity reached for ${item.name}`
                         : `Add ${item.name} to order`
                     }
-                    disabled={isSaving || quantityLimitReached}
+                    disabled={isSaving || !cartRestored || quantityLimitReached}
                     onClick={() => updateTicket({ type: "add", item })}
-                    className="relative flex min-h-24 flex-col justify-between rounded-2xl border border-roast/15 bg-counter p-4 text-left text-roast transition-transform duration-100 active:scale-[0.98] hover:border-pistachio/60 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-pistachio motion-reduce:transition-none motion-reduce:active:scale-100 disabled:cursor-not-allowed disabled:opacity-50 sm:p-5"
+                    className="relative flex min-h-28 touch-manipulation flex-col justify-between rounded-2xl border border-roast/15 bg-counter p-4 text-left text-roast transition-transform duration-100 active:scale-[0.98] hover:border-pistachio/60 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-pistachio motion-reduce:transition-none motion-reduce:active:scale-100 disabled:cursor-not-allowed disabled:opacity-50 sm:p-5"
                   >
                     {quantity > 0 && (
                       <span className="absolute right-3 top-3 inline-flex min-h-7 min-w-7 items-center justify-center rounded-full bg-pistachio px-2 text-sm font-bold text-counter tabular-nums">
@@ -194,7 +295,7 @@ export default function OrderScreen({ items }: { items: MenuItem[] }) {
                   </button>
                 );
               })}
-            </div>
+            </div>}
           </section>
         </div>
 
@@ -205,19 +306,23 @@ export default function OrderScreen({ items }: { items: MenuItem[] }) {
         >
           <span aria-hidden="true" className="pointer-events-none absolute right-0 top-0 h-8 w-8 bg-[linear-gradient(225deg,var(--steam)_0_49%,rgba(43,33,28,0.12)_50%,transparent_54%)]" />
           {saveFeedback?.kind === "success" && (
-            <p aria-live="polite" className="mb-4 rounded-xl border border-pistachio/25 bg-counter/70 p-4 text-center text-pistachio motion-safe:animate-[feedback-fade_180ms_ease-out] motion-reduce:animate-none">
-              <span className="block text-sm font-semibold">Order</span>
-              <span className="font-display text-3xl">#{saveFeedback.orderNumber} saved</span>
-            </p>
+            <div aria-live="polite" className="mb-4 rounded-xl border border-pistachio/25 bg-counter/70 p-4 text-center text-pistachio motion-safe:animate-[feedback-fade_180ms_ease-out] motion-reduce:animate-none">
+              <span className="block text-sm font-semibold">Order placed · {saveFeedback.orderType === "dine_in" ? "Dine in" : "Takeaway"}</span>
+              <span className="font-display text-3xl">Order #{saveFeedback.orderNumber}</span>
+              <span className="mt-1 block text-sm">{formatPeso(saveFeedback.totalCentavos)} total</span>
+            </div>
           )}
           <TicketPanel
             lines={lines}
             totalCentavos={orderTotalCentavos}
             dispatch={updateTicket}
             customerName={customerName}
-            setCustomerName={setCustomerName}
+            setCustomerName={updateCustomerName}
             isSaving={isSaving}
             saveFeedback={saveFeedback?.kind === "error" ? saveFeedback : null}
+            orderType={orderType}
+            setOrderType={updateOrderType}
+            canSubmit={canSubmit}
             onSave={() => void handleSaveOrder()}
           />
         </aside>
@@ -236,10 +341,10 @@ export default function OrderScreen({ items }: { items: MenuItem[] }) {
           <button
             type="button"
             onClick={() => void handleSaveOrder()}
-            disabled={lines.length === 0 || isSaving}
+            disabled={!canSubmit}
             className="inline-flex min-h-14 min-w-36 items-center justify-center rounded-xl bg-pistachio px-5 font-semibold text-counter focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-pistachio disabled:cursor-not-allowed disabled:bg-[#6B6259] disabled:text-white"
           >
-            {isSaving ? "Saving…" : "Save order"}
+            {isSaving ? "Saving…" : saveFeedback?.kind === "error" ? "Retry order" : "Place order"}
           </button>
         </div>
       </div>
@@ -255,6 +360,9 @@ function TicketPanel({
   setCustomerName,
   isSaving,
   saveFeedback,
+  orderType,
+  setOrderType,
+  canSubmit,
   onSave,
 }: {
   lines: CartLine[];
@@ -264,6 +372,9 @@ function TicketPanel({
   setCustomerName: (name: string) => void;
   isSaving: boolean;
   saveFeedback: Extract<SaveFeedback, { kind: "error" }> | null;
+  orderType: "dine_in" | "takeaway";
+  setOrderType: (value: "dine_in" | "takeaway") => void;
+  canSubmit: boolean;
   onSave: () => void;
 }) {
   return (
@@ -302,6 +413,18 @@ function TicketPanel({
                   <p className="mt-1 text-sm text-muted tabular-nums">
                     {line.quantity} × {formatPeso(line.item.price_centavos)}
                   </p>
+                  <label className="mt-2 block text-xs font-semibold text-muted">
+                    Drink note (optional)
+                    <input
+                      type="text"
+                      value={line.note}
+                      maxLength={140}
+                      disabled={isSaving}
+                      onChange={(event) => dispatch({ type: "set_note", id: line.item.id, note: event.target.value })}
+                      placeholder="e.g. oat milk, less ice"
+                      className="mt-1 min-h-10 w-full rounded-lg border border-roast/20 bg-counter px-3 text-sm font-normal text-roast outline-none focus:border-pistachio"
+                    />
+                  </label>
                 </div>
                 <div className="flex shrink-0 items-center gap-2">
                   <button
@@ -347,6 +470,21 @@ function TicketPanel({
       </div>
 
       <div className="mt-5 space-y-4 border-t border-roast/20 pt-5">
+        <fieldset>
+          <legend className="mb-2 text-sm font-semibold">Order type</legend>
+          <div className="grid grid-cols-2 gap-2">
+            {(["takeaway", "dine_in"] as const).map((value) => (
+              <label key={value} className={`flex min-h-12 cursor-pointer items-center justify-center rounded-xl border px-3 text-sm font-semibold capitalize ${orderType === value ? "border-pistachio bg-pistachio/15" : "border-roast/20 bg-counter"}`}>
+                <input className="sr-only" type="radio" name="order-type" value={value} checked={orderType === value} disabled={isSaving} onChange={() => setOrderType(value)} />
+                {value === "dine_in" ? "Dine in" : "Takeaway"}
+              </label>
+            ))}
+          </div>
+        </fieldset>
+
+      </div>
+
+      <div className="mt-5 space-y-4 border-t border-roast/20 pt-5">
         <div>
           <label
             htmlFor="customer-name"
@@ -357,6 +495,7 @@ function TicketPanel({
           <input
             id="customer-name"
             type="text"
+            maxLength={100}
             value={customerName}
             disabled={isSaving}
             onChange={(event) => {
@@ -371,7 +510,7 @@ function TicketPanel({
             role="alert"
             className="rounded-xl border border-error/30 bg-counter p-3 text-sm text-error"
           >
-            <span className="block font-semibold">Couldn&apos;t save the order. Your ticket is still here, so you can try again.</span>
+            <span className="block font-semibold">Couldn&apos;t save the order. Your ticket is still here; edit it or retry.</span>
             {saveFeedback.detail && <span className="mt-1 block break-words text-xs text-roast/75">{saveFeedback.detail}</span>}
           </p>
         )}
@@ -379,10 +518,10 @@ function TicketPanel({
         <button
           type="button"
           onClick={onSave}
-          disabled={lines.length === 0 || isSaving}
+          disabled={!canSubmit}
           className="min-h-14 w-full rounded-xl bg-pistachio px-5 font-semibold text-counter hover:bg-pistachio/90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-pistachio disabled:cursor-not-allowed disabled:bg-[#6B6259] disabled:text-white"
         >
-          {isSaving ? "Saving order…" : "Save order"}
+          {isSaving ? "Saving order…" : saveFeedback ? "Retry order" : "Place order"}
         </button>
       </div>
     </div>

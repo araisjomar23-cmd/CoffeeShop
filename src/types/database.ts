@@ -39,6 +39,24 @@ export type Database = {
   }
   public: {
     Tables: {
+      staff_profiles: {
+        Row: {
+          created_at: string
+          role: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          role: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          role?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       menu_items: {
         Row: {
           category: string
@@ -65,6 +83,117 @@ export type Database = {
           price_centavos?: number
         }
         Relationships: []
+      }
+      ingredients: {
+        Row: {
+          created_at: string
+          id: string
+          low_stock_threshold: number
+          name: string
+          quantity_on_hand: number
+          unit: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          low_stock_threshold?: number
+          name: string
+          quantity_on_hand?: number
+          unit: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          low_stock_threshold?: number
+          name?: string
+          quantity_on_hand?: number
+          unit?: string
+        }
+        Relationships: []
+      }
+      menu_item_recipes: {
+        Row: {
+          created_at: string
+          ingredient_id: string
+          menu_item_id: string
+          quantity_per_item: number
+        }
+        Insert: {
+          created_at?: string
+          ingredient_id: string
+          menu_item_id: string
+          quantity_per_item: number
+        }
+        Update: {
+          created_at?: string
+          ingredient_id?: string
+          menu_item_id?: string
+          quantity_per_item?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "menu_item_recipes_ingredient_id_fkey"
+            columns: ["ingredient_id"]
+            isOneToOne: false
+            referencedRelation: "ingredients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "menu_item_recipes_menu_item_id_fkey"
+            columns: ["menu_item_id"]
+            isOneToOne: false
+            referencedRelation: "menu_items"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      inventory_movements: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          id: string
+          ingredient_id: string
+          movement_type: string
+          order_id: string | null
+          quantity_delta: number
+          reason: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          ingredient_id: string
+          movement_type: string
+          order_id?: string | null
+          quantity_delta: number
+          reason: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          ingredient_id?: string
+          movement_type?: string
+          order_id?: string | null
+          quantity_delta?: number
+          reason?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "inventory_movements_ingredient_id_fkey"
+            columns: ["ingredient_id"]
+            isOneToOne: false
+            referencedRelation: "ingredients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inventory_movements_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       order_items: {
         Row: {
@@ -116,29 +245,47 @@ export type Database = {
       }
       orders: {
         Row: {
+          cancellation_reason: string | null
+          cash_received_centavos: number | null
           created_at: string
+          change_centavos: number | null
           customer_name: string | null
           id: string
           order_date: string
           order_number: number
+          order_type: string | null
+          paid_at: string | null
+          payment_method: string | null
           status: string
           total_centavos: number
         }
         Insert: {
+          cancellation_reason?: string | null
+          cash_received_centavos?: number | null
           created_at?: string
+          change_centavos?: number | null
           customer_name?: string | null
           id?: string
           order_date?: string
           order_number?: number
+          order_type?: string | null
+          paid_at?: string | null
+          payment_method?: string | null
           status?: string
           total_centavos?: number
         }
         Update: {
+          cancellation_reason?: string | null
+          cash_received_centavos?: number | null
           created_at?: string
+          change_centavos?: number | null
           customer_name?: string | null
           id?: string
           order_date?: string
           order_number?: number
+          order_type?: string | null
+          paid_at?: string | null
+          payment_method?: string | null
           status?: string
           total_centavos?: number
         }
@@ -149,12 +296,58 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      create_order: {
-        Args: { p_customer_name: string; p_items: Json }
+      create_order_idempotent: {
+        Args: {
+          p_request_id: string
+          p_customer_name: string
+          p_items: Json
+          p_order_type: string
+        }
         Returns: {
+          change_centavos: number
           order_id: string
           order_number: number
+          total_centavos: number
         }[]
+      }
+      create_order: {
+        Args: {
+          p_cash_received_centavos: number | null
+          p_customer_name: string
+          p_items: Json
+          p_order_type: string
+          p_payment_method: string | null
+        }
+        Returns: {
+          change_centavos: number
+          order_id: string
+          order_number: number
+          total_centavos: number
+        }[]
+      }
+      cancel_order: {
+        Args: { p_order_id: string; p_reason: string }
+        Returns: undefined
+      }
+      transition_order: {
+        Args: { p_order_id: string; p_next_status: string }
+        Returns: undefined
+      }
+      create_ingredient: {
+        Args: { p_name: string; p_unit: string; p_low_stock_threshold: number }
+        Returns: string
+      }
+      set_menu_item_recipe: {
+        Args: { p_menu_item_id: string; p_ingredient_id: string; p_quantity_per_item: number }
+        Returns: undefined
+      }
+      remove_menu_item_recipe: {
+        Args: { p_menu_item_id: string; p_ingredient_id: string }
+        Returns: undefined
+      }
+      record_inventory_movement: {
+        Args: { p_ingredient_id: string; p_movement_type: string; p_quantity: number; p_adjustment_direction: string; p_reason: string }
+        Returns: undefined
       }
     }
     Enums: {
