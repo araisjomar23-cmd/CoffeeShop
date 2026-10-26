@@ -216,8 +216,9 @@ export default function OrderScreen({ items, popularItemIds }: { items: MenuItem
         <div className="min-w-0">
           <div className="mb-5 flex items-end justify-between gap-4">
             <h2 className="text-lg font-semibold text-roast">Menu</h2>
-            <p className="text-sm text-muted">{normalizedQuery ? `${visibleItems.length} matching items` : "Choose a category"}</p>
+            <p className="text-right text-sm text-muted">{normalizedQuery ? `${visibleItems.length} matching items` : "Choose a category"}</p>
           </div>
+          <p className="mb-4 text-sm text-muted">Add-ons are separate ticket lines. Use item notes to say which drink or burger they go with, and to record combo choices.</p>
 
           <label htmlFor="menu-search" className="sr-only">Search menu</label>
           <div className="mb-5 flex gap-2">
@@ -414,14 +415,14 @@ function TicketPanel({
                     {line.quantity} × {formatPeso(line.item.price_centavos)}
                   </p>
                   <label className="mt-2 block text-xs font-semibold text-muted">
-                    Drink note (optional)
+                    Item note (optional)
                     <input
                       type="text"
                       value={line.note}
                       maxLength={140}
                       disabled={isSaving}
                       onChange={(event) => dispatch({ type: "set_note", id: line.item.id, note: event.target.value })}
-                      placeholder="e.g. oat milk, less ice"
+                      placeholder="e.g. pearl for Milk Tea #1; combo choices"
                       className="mt-1 min-h-10 w-full rounded-lg border border-roast/20 bg-counter px-3 text-sm font-normal text-roast outline-none focus:border-pistachio"
                     />
                   </label>
