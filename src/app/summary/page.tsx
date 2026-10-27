@@ -1,4 +1,4 @@
-import { summarizeCollections } from "@/lib/sales-summary";
+import { summarizeCollections, summarizeSales } from "@/lib/sales-summary";
 import { readAllPages } from "@/lib/read-all-pages";
 import Link from "next/link";
 import { connection } from "next/server";
@@ -6,14 +6,13 @@ import { Suspense } from "react";
 import { formatPeso } from "@/lib/money";
 import { requireStaffRole } from "@/lib/auth";
 import StaffNav from "@/components/StaffNav";
-import CancelOrderForm from "@/components/CancelOrderForm";
 import { createClient } from "@/lib/supabase/server";
 import type { Tables } from "@/types/database";
 import RouteLoading from "@/components/RouteLoading";
 
 type Order = Tables<"orders">;
 type OrderItem = Tables<"order_items">;
-type OrderWithItems = Order & { order_items: Pick<OrderItem, "item_name" | "quantity" | "note">[] };
+type OrderWithItems = Omit<Order, "revision"> & { order_items: Pick<OrderItem, "item_name" | "quantity" | "note">[] };
 type SearchParams = Promise<Record<string, string | string[] | undefined>>;
 
 export default function SummaryPage({ searchParams }: { searchParams: SearchParams }) {
@@ -29,7 +28,7 @@ async function AuthorizedSummaryPage({ searchParams }: { searchParams: SearchPar
   const role = await requireStaffRole(["owner"]);
   return (
     <main className="min-h-screen bg-steam text-roast">
-      <div className="mx-auto w-full max-w-7xl px-3 py-5 sm:px-6 sm:py-7 lg:py-9">
+      <div className="mx-auto w-full max-w-6xl px-3 py-5 sm:px-6 sm:py-7 lg:py-9">
         <header className="mb-7 border-b border-roast/10 pb-6 sm:mb-8">
           <h1 className="font-display text-3xl leading-tight sm:text-4xl lg:text-5xl">Sales summary</h1>
           <StaffNav current="sales" role={role} />
@@ -66,7 +65,7 @@ async function SummaryContent({ searchParams }: { searchParams: SearchParams }) 
     const supabase = await createClient();
     const [daily, payments] = await Promise.all([
       readAllPages((from, to) => supabase.from("orders")
-        .select("revision, id, order_date, order_number, customer_name, status, total_centavos, created_at, order_type, payment_method, cash_received_centavos, change_centavos, cancellation_reason, order_items(item_name, quantity, note)")
+        .select("id, order_date, order_number, customer_name, status, total_centavos, created_at, order_type, payment_method, cash_received_centavos, change_centavos, cancellation_reason, order_items(item_name, quantity, note)")
         .eq("order_date", date).order("created_at", { ascending: false }).order("id").range(from, to)),
       readAllPages((from, to) => supabase.from("order_payment_events").select("amount_centavos, payment_method")
         .gte("created_at", date + "T00:00:00+08:00").lt("created_at", shiftDate(date, 1) + "T00:00:00+08:00").order("id").range(from, to)),
@@ -82,66 +81,76 @@ async function SummaryContent({ searchParams }: { searchParams: SearchParams }) 
     );
   }
 
-  const salesOrders = orders.filter((order) => order.status !== "cancelled");
-  const cancelledOrders = orders.filter((order) => order.status === "cancelled");
-  const salesCentavos = salesOrders.reduce((sum, order) => sum + order.total_centavos, 0);
-  const averageCentavos = salesOrders.length > 0
-    ? Math.round(salesCentavos / salesOrders.length)
-    : null;
-  const paymentTotals = { cash: 0, card: 0, e_wallet: 0, unrecorded: 0 };
-  for (const order of salesOrders) {
-    if (order.payment_method === "cash") paymentTotals.cash += order.total_centavos;
-    else if (order.payment_method === "card") paymentTotals.card += order.total_centavos;
-    else if (order.payment_method === "e_wallet") paymentTotals.e_wallet += order.total_centavos;
-    else paymentTotals.unrecorded += order.total_centavos;
-  }
-  const unrecordedCount = salesOrders.filter((order) => !["cash", "e_wallet", "card"].includes(order.payment_method ?? "")).length;
+  const { salesOrders, cancelledOrders, salesCentavos, averageCentavos, paymentTotals, unrecordedCount, rankedItems } = summarizeSales(orders);
   const collections = summarizeCollections(paymentEvents);
-  const bestSellers = new Map<string, number>();
-  for (const order of salesOrders) {
-    for (const item of order.order_items) {
-      bestSellers.set(item.item_name, (bestSellers.get(item.item_name) ?? 0) + item.quantity);
-    }
-  }
-  const rankedItems = Array.from(bestSellers, ([name, quantity]) => ({ name, quantity }))
-    .sort((a, b) => b.quantity - a.quantity || a.name.localeCompare(b.name))
-    .slice(0, 5);
 
   return (
     <>
-      <section aria-label="Date navigation" className="mb-6 rounded-2xl border border-roast/10 bg-counter p-4">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div><p className="text-sm text-muted">{date === today ? "Today" : "Selected date"}</p><h2 className="font-display text-2xl">{dateLabel}</h2></div>
-          <Link href="/summary" className="inline-flex min-h-11 items-center rounded-xl border border-roast/20 px-4 text-sm font-semibold">{date === today ? "Refresh" : "Back to today"}</Link>
+      <section aria-label="Date navigation" className="mb-6 rounded-2xl border border-roast/10 bg-counter p-4 sm:p-5">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="min-w-0"><p className="text-xs font-semibold uppercase tracking-wide text-muted">{date === today ? "Today's sales" : "Sales for"}</p><h2 className="mt-1 font-display text-xl sm:text-2xl">{dateLabel}</h2></div>
+          <Link href="/summary" className="inline-flex min-h-10 shrink-0 items-center rounded-lg border border-roast/15 px-3 text-sm font-semibold hover:bg-steam">{date === today ? "Refresh" : "Today"}</Link>
         </div>
-        <form action="/summary" className="mt-4 flex min-w-0 flex-wrap items-end gap-2">
-          <label className="min-w-0 flex-1 text-sm font-semibold">Sales date<input key={date} type="date" name="date" required max={today} defaultValue={date} className="mt-1 min-h-11 w-full rounded-lg border border-roast/20 bg-steam px-3" /></label>
-          <button className="min-h-11 rounded-lg bg-pistachio px-4 font-semibold text-counter">View</button>
-        </form>
-        <div className="mt-3 grid grid-cols-2 gap-2">
-          <Link href={`/summary?date=${previousDate}`} className="inline-flex min-h-11 items-center justify-center rounded-lg border border-roast/20 px-3 text-sm font-semibold">Previous day</Link>
-          {date < today ? <Link href={`/summary?date=${nextDate}`} className="inline-flex min-h-11 items-center justify-center rounded-lg border border-roast/20 px-3 text-sm font-semibold">Next day</Link> : <span aria-disabled="true" className="inline-flex min-h-11 items-center justify-center rounded-lg bg-steam px-3 text-sm text-muted">Next day</span>}
+        <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-[auto_minmax(0,1fr)_auto] sm:items-end">
+          <form action="/summary" className="col-span-2 grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-end gap-2 sm:col-span-1 sm:order-2">
+            <label className="min-w-0 text-xs font-semibold text-muted">Choose date<input key={date} type="date" name="date" required max={today} defaultValue={date} className="mt-1 min-h-11 w-full rounded-lg border border-roast/15 bg-steam px-3 text-roast" /></label>
+            <button className="min-h-11 rounded-lg bg-pistachio px-4 text-sm font-semibold text-counter hover:bg-pistachio/90">View</button>
+          </form>
+          <Link href={`/summary?date=${previousDate}`} className="inline-flex min-h-11 items-center justify-center rounded-lg border border-roast/15 px-2 text-xs font-semibold hover:bg-steam sm:order-1 sm:px-3 sm:text-sm">Previous day</Link>
+          {date < today ? <Link href={`/summary?date=${nextDate}`} className="inline-flex min-h-11 items-center justify-center rounded-lg border border-roast/15 px-2 text-xs font-semibold hover:bg-steam sm:order-3 sm:px-3 sm:text-sm">Next day</Link> : <span aria-disabled="true" className="inline-flex min-h-11 items-center justify-center rounded-lg bg-steam px-2 text-xs text-muted sm:order-3 sm:px-3 sm:text-sm">Next day</span>}
         </div>
       </section>
-      <section aria-label="Sales statistics" className="mb-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <StatTile label="Order sales" value={formatPeso(salesCentavos)} valueClassName="text-pistachio" />
+      <section aria-labelledby="at-a-glance-heading" className="mb-6">
+        <div className="mb-3"><h2 id="at-a-glance-heading" className="font-display text-xl sm:text-2xl">At a glance</h2><p className="mt-1 text-xs text-muted sm:text-sm">Order totals for {date === today ? "today" : dateLabel}.</p></div>
+        <div aria-label="Sales statistics" className="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-4">
+        <StatTile label="Order sales" value={formatPeso(salesCentavos)} valueClassName="text-counter" featured />
         <StatTile label="Orders (not cancelled)" value={String(salesOrders.length)} />
         <StatTile label="Average order" value={averageCentavos === null ? "--" : formatPeso(averageCentavos)} />
         <StatTile label="Cancelled orders" value={String(cancelledOrders.length)} valueClassName="text-error" />
+        </div>
+        <p className="mt-2 text-xs leading-relaxed text-muted">Includes active orders, even while they are being prepared. Cancelled orders are excluded.</p>
       </section>
-      <p className="mb-6 text-sm text-muted">Current value of orders placed on this date, including orders still being prepared. Cancelled orders are excluded.</p>
-      <section aria-labelledby="payment-summary-heading" className="mb-6 rounded-2xl border border-roast/10 bg-counter p-4 sm:p-5">
-        <h2 id="payment-summary-heading" className="font-display text-2xl">Payment breakdown</h2>
-        <dl className="mt-4 grid grid-cols-2 gap-3">
+      <section aria-labelledby="reports-heading" className="mb-6 rounded-2xl border border-roast/10 bg-counter p-4 sm:p-5">
+        <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+          <div><h2 id="reports-heading" className="font-display text-xl sm:text-2xl">Reports</h2><p className="mt-1 text-xs text-muted sm:text-sm">Download daily or date-range sales details.</p></div>
+          <a href={`/summary/export?date=${date}`} className="inline-flex min-h-11 w-full items-center justify-center rounded-lg bg-pistachio px-4 text-center text-sm font-semibold text-counter hover:bg-pistachio/90 sm:w-auto">Download daily PDF</a>
+        </div>
+        <form action="/summary/export" method="get" className="grid min-w-0 gap-3 rounded-xl border border-roast/10 bg-steam/50 p-3 sm:grid-cols-2 sm:p-4 xl:grid-cols-[minmax(0,1fr)_minmax(9rem,auto)_minmax(9rem,auto)_auto] xl:items-end">
+          <div className="min-w-0 sm:col-span-2 xl:col-span-1"><h3 className="font-semibold">Export a date range</h3><p className="mt-1 text-xs text-muted sm:text-sm">Download sales and order details for up to one year.</p></div>
+          <label className="block min-w-0 text-sm font-semibold">From<input type="date" name="startDate" required defaultValue={date} className="mt-1 min-h-11 w-full rounded-lg border border-roast/20 bg-counter px-3 font-normal" /></label>
+          <label className="block min-w-0 text-sm font-semibold">To<input type="date" name="endDate" required defaultValue={date} className="mt-1 min-h-11 w-full rounded-lg border border-roast/20 bg-counter px-3 font-normal" /></label>
+          <button className="inline-flex min-h-11 w-full items-center justify-center rounded-lg border border-roast/10 bg-counter px-4 text-sm font-semibold hover:border-pistachio sm:col-span-2 xl:col-span-1">Download range PDF</button>
+        </form>
+      </section>
+      <section aria-labelledby="payment-summary-heading" className="mb-6">
+        <div className="mb-3"><h2 id="payment-summary-heading" className="font-display text-xl sm:text-2xl">Payments</h2><p className="mt-1 text-xs text-muted sm:text-sm">See what orders were marked as paid and what money was recorded.</p></div>
+        <div className="grid gap-3 lg:grid-cols-2">
+        <article className="min-w-0 rounded-2xl border border-roast/10 bg-counter p-4 sm:p-5">
+        <h3 className="font-semibold">Order sales by payment method</h3>
+        <p className="mt-1 text-xs text-muted">Based on the payment method saved on each order.</p>
+        <dl className="mt-4 grid grid-cols-2 gap-2 sm:gap-3">
           <PaymentTile label="Cash orders" amount={paymentTotals.cash} />
           <PaymentTile label="GCash orders" amount={paymentTotals.e_wallet} />
           {paymentTotals.card > 0 && <PaymentTile label="Card (older orders)" amount={paymentTotals.card} />}
           {unrecordedCount > 0 && <PaymentTile label="Method not recorded" amount={paymentTotals.unrecorded} />}
         </dl>
         {unrecordedCount > 0 && <p className="mt-3 rounded-xl bg-sticky/50 p-3 text-sm">{unrecordedCount} older {unrecordedCount === 1 ? "order has" : "orders have"} no payment method recorded. Their value is included in order sales, but cannot be assigned to cash or GCash.</p>}
+        </article>
+        <article className="min-w-0 rounded-2xl border border-roast/10 bg-counter p-4 sm:p-5">
+          <h3 className="font-semibold">Collections and refunds</h3>
+          <p className="mt-1 text-xs text-muted">Actual money movements recorded on {date === today ? "today" : dateLabel}. Refunds for older cancelled orders may be unavailable if they were not recorded at the time.</p>
+          {paymentEvents.length === 0 ? <p className="mt-4 rounded-xl bg-steam p-3 text-sm leading-relaxed text-muted">No payment movements recorded for this date. This can differ from order sales, especially for older orders.</p> : <dl className="mt-4 grid grid-cols-2 gap-2 sm:gap-3">
+            <PaymentTile label="Received" amount={collections.received} />
+            <PaymentTile label="Returned" amount={collections.returned} />
+            <PaymentTile label="Net cash" amount={collections.cash} />
+            <PaymentTile label="Net GCash" amount={collections.e_wallet} />
+            {collections.card !== 0 && <PaymentTile label="Net card (older orders)" amount={collections.card} />}
+          </dl>}
+        </article>
+        </div>
       </section>
       <section aria-labelledby="daily-orders-heading" className="mb-6">
-        <h2 id="daily-orders-heading" className="mb-4 font-display text-2xl">Orders for this date</h2>
+        <div className="mb-3"><h2 id="daily-orders-heading" className="font-display text-xl sm:text-2xl">Orders</h2><p className="mt-1 text-xs text-muted sm:text-sm">Order details and current status for this date.</p></div>
         {orders.length === 0 ? (
           <p className="rounded-2xl border border-dashed border-roast/20 bg-counter p-8 text-center text-roast">No orders for this day yet.</p>
         ) : (
@@ -162,19 +171,9 @@ async function SummaryContent({ searchParams }: { searchParams: SearchParams }) 
           </>
         )}
       </section>
-      <details className="mb-6 rounded-2xl border border-roast/10 bg-counter p-4 sm:p-5">
-        <summary className="min-h-11 cursor-pointer font-semibold">Recorded collections and refunds</summary>
-        <p className="mt-2 text-sm text-muted">Money recorded on this date, including adjustments or refunds for older orders. These figures can differ from sales for orders placed on this date.</p>
-        {paymentEvents.length === 0 ? <p className="mt-4 rounded-xl bg-steam p-4 text-sm">No payment movements recorded for this date. Older orders may have sales without payment history; this does not mean nothing was collected.</p> : <dl className="mt-4 grid grid-cols-2 gap-3">
-          <PaymentTile label="Received" amount={collections.received} />
-          <PaymentTile label="Returned" amount={collections.returned} />
-          <PaymentTile label="Net cash" amount={collections.cash} />
-          <PaymentTile label="Net GCash" amount={collections.e_wallet} />
-          {collections.card !== 0 && <PaymentTile label="Net card (older orders)" amount={collections.card} />}
-        </dl>}
-      </details>
-      <details aria-labelledby="best-sellers-heading" className="mb-8 rounded-2xl border border-roast/10 bg-counter p-5 sm:p-6">
-        <summary id="best-sellers-heading" className="min-h-11 cursor-pointer font-semibold">Top items for this date</summary>
+      <section aria-labelledby="best-sellers-heading" className="mb-6 rounded-2xl border border-roast/10 bg-counter p-4 sm:p-5">
+        <h2 id="best-sellers-heading" className="font-display text-xl sm:text-2xl">Top items</h2>
+        <p className="mt-1 text-xs text-muted sm:text-sm">Most ordered items for this date.</p>
       {rankedItems.length === 0 ? (
           <p className="mt-4 text-muted">No items sold.</p>
         ) : (
@@ -188,37 +187,20 @@ async function SummaryContent({ searchParams }: { searchParams: SearchParams }) 
             ))}
           </ol>
         )}
-      </details>
+      </section>
 
-      <details className="mt-6 rounded-2xl border border-roast/10 bg-counter p-4 sm:p-5">
-        <summary className="mb-3 min-h-11 cursor-pointer font-semibold">Download reports</summary>
-        <p className="mb-3 text-sm text-muted">Order reports use the order date. Cancelled orders remain listed but contribute zero to sales.</p>
-      <div className="mb-6 flex justify-stretch sm:justify-end">
-        <a href={`/summary/export?date=${date}`} className="inline-flex min-h-12 w-full items-center justify-center rounded-xl border border-roast/20 bg-counter px-5 text-center font-semibold text-roast hover:border-pistachio focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-pistachio sm:w-auto">
-          Download daily sales CSV
-        </a>
-      </div>
-
-      <form action="/summary/export" method="get" className="mb-6 rounded-2xl border border-roast/10 bg-counter p-4 grid min-w-0 gap-3 sm:grid-cols-2 xl:grid-cols-[minmax(0,1fr)_auto_auto_auto] xl:items-end">
-        <div className="min-w-0 sm:col-span-2 xl:col-span-1"><h2 className="font-semibold">Export a date range</h2><p className="mt-1 text-sm text-muted">Download sales and order details for up to one year.</p></div>
-        <label className="mt-3 block text-sm font-semibold sm:mt-0">From<input type="date" name="startDate" required defaultValue={date} className="mt-1 min-h-11 w-full rounded-lg border border-roast/20 bg-steam px-3 font-normal min-w-0" /></label>
-        <label className="mt-3 block text-sm font-semibold sm:mt-0">To<input type="date" name="endDate" required defaultValue={date} className="mt-1 min-h-11 w-full rounded-lg border border-roast/20 bg-steam px-3 font-normal min-w-0" /></label>
-        <button className="mt-3 inline-flex min-h-11 w-full items-center justify-center rounded-lg bg-pistachio px-4 font-semibold text-counter sm:col-span-2 sm:mt-0 xl:col-span-1">Download range CSV</button>
-      </form>
-
-      </details>
     </>
   );
 }
 
 function PaymentTile({ label, amount }: { label: string; amount: number }) {
-  return <div className="min-w-0 rounded-xl bg-steam/70 p-3"><dt className="text-sm font-semibold text-muted">{label}</dt><dd className="mt-1 break-words font-semibold tabular-nums">{formatPeso(amount)}</dd></div>;
+  return <div className="min-w-0 rounded-xl border border-roast/5 bg-steam/70 p-3"><dt className="text-xs font-semibold text-muted sm:text-sm">{label}</dt><dd className="mt-1 break-words font-semibold tabular-nums">{formatPeso(amount)}</dd></div>;
 }
 
-function StatTile({ label, value, valueClassName = "text-roast" }: { label: string; value: string | null; valueClassName?: string }) {
+function StatTile({ label, value, valueClassName = "text-roast", featured = false }: { label: string; value: string | null; valueClassName?: string; featured?: boolean }) {
   return (
-    <div className="min-w-0 rounded-2xl border border-roast/10 bg-counter p-3 sm:p-5">
-      <p className="text-sm font-semibold text-muted">{label}</p>
+    <div className={`min-w-0 rounded-2xl border p-3 sm:p-5 ${featured ? "border-pistachio bg-pistachio text-counter" : "border-roast/10 bg-counter"}`}>
+      <p className={`text-xs font-semibold sm:text-sm ${featured ? "text-counter/75" : "text-muted"}`}>{label}</p>
       {value !== null && <p className={`mt-2 break-words font-display text-xl tabular-nums sm:text-3xl ${valueClassName}`}>{value}</p>}
     </div>
   );
@@ -232,7 +214,7 @@ function OrderTableRow({ order }: { order: OrderWithItems }) {
       <td className="px-4 py-4">{order.customer_name?.trim() || "No name"}</td>
       <td className="px-4 py-4">{summarizeItems(order.order_items)}{order.order_items.some((item) => item.note) && <ul className="mt-2 space-y-1 text-xs text-muted">{order.order_items.filter((item) => item.note).map((item, index) => <li key={`${item.item_name}-${index}`}>{item.item_name}: {item.note}</li>)}</ul>}</td>
       <td className="whitespace-nowrap px-4 py-4 text-right tabular-nums"><span className="font-semibold">{formatPeso(order.total_centavos)}</span><span className="mt-1 block text-xs text-muted">{paymentLabel(order.payment_method)}{order.cash_received_centavos !== null && ` · received ${formatPeso(order.cash_received_centavos)} · change ${formatPeso(order.change_centavos ?? 0)}`}</span></td>
-      <td className="px-4 py-4"><StatusBadge status={order.status} />{order.cancellation_reason && <p className="mt-1 max-w-44 text-xs text-error">Reason: {order.cancellation_reason}</p>}{order.status !== "cancelled" && <CancelOrderForm orderId={order.id} revision={order.revision} totalCentavos={order.total_centavos} paymentMethod={order.payment_method} />}</td>
+      <td className="px-4 py-4"><StatusBadge status={order.status} />{order.cancellation_reason && <p className="mt-1 max-w-44 text-xs text-error">Reason: {order.cancellation_reason}</p>}</td>
     </tr>
   );
 }
@@ -249,7 +231,6 @@ function OrderCard({ order }: { order: OrderWithItems }) {
       <p className="mt-3 text-right font-semibold tabular-nums">{formatPeso(order.total_centavos)}</p>
       {order.cash_received_centavos !== null && <p className="text-right text-xs text-muted">Received {formatPeso(order.cash_received_centavos)} · change {formatPeso(order.change_centavos ?? 0)}</p>}
       {order.cancellation_reason && <p className="mt-2 text-xs text-error">Cancellation reason: {order.cancellation_reason}</p>}
-      {order.status !== "cancelled" && <CancelOrderForm orderId={order.id} revision={order.revision} totalCentavos={order.total_centavos} paymentMethod={order.payment_method} />}
     </li>
   );
 }

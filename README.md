@@ -2,7 +2,7 @@ This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-
 
 ## Sales exports and database backups
 
-On the Sales page, choose a date and select **Download daily sales CSV** to save that day's orders and items. This is a report for the owner; it is not a complete database backup.
+On the Sales page, choose a date or date range and download the sales PDF. It includes an order-sales overview, payment activity, top items, and order details. This is a report for the owner; it is not a complete database backup.
 
 For a full backup of the POS database on the free Supabase plan, use the Supabase CLI. Install Docker Desktop, then log in and link this local project to the correct Supabase project. Run these commands from the project folder, replacing the placeholder with the project reference from the Supabase project URL:
 
