@@ -118,6 +118,8 @@ export async function createOrder(
 export async function cancelPaidOrder(
   orderId: string,
   reason: string,
+  revision: number,
+  refundConfirmed: boolean,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   await requireStaffRole(["owner"]);
   if (!UUID_PATTERN.test(orderId)) return { ok: false, error: "Invalid order." };
@@ -130,6 +132,8 @@ export async function cancelPaidOrder(
     const { error } = await supabase.rpc("cancel_order", {
       p_order_id: orderId,
       p_reason: reason.trim(),
+      p_expected_revision: revision,
+      p_refund_confirmed: refundConfirmed,
     });
     if (error) return { ok: false, error: error.message };
     revalidatePath("/kitchen");
@@ -145,6 +149,8 @@ export async function editActiveOrder(
   customerName: string,
   orderType: OrderType,
   items: EditOrderItemInput[],
+  revision: number,
+  paymentConfirmed: boolean,
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   await requireStaffRole();
   if (!UUID_PATTERN.test(orderId)) return { ok: false, error: "Invalid order." };
@@ -198,6 +204,8 @@ export async function editActiveOrder(
       p_customer_name: customerName.trim(),
       p_order_type: orderType,
       p_items: items,
+      p_expected_revision: revision,
+      p_payment_confirmed: paymentConfirmed,
     });
     if (error) return { ok: false, error: error.message };
     revalidatePath("/kitchen");

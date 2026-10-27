@@ -50,3 +50,21 @@ body {
 @media print {
   .no-print { display: none !important; }
 }
+
+/* Keep phone inputs readable without automatic focus zoom. */
+@media (max-width: 1023px) {
+  input:not([type="checkbox"]):not([type="radio"]), textarea, select { font-size: 16px; }
+}
+html { scroll-padding-top: 1rem; }
+
+/* Let content wrap inside flex/grid tracks instead of widening the viewport. */
+main, section, article, aside, fieldset { min-width: 0; }
+fieldset { max-width: 100%; }
+input, textarea, select { min-width: 0; max-width: 100%; }
+h1, h2, h3, h4, p, li, dd { overflow-wrap: anywhere; }
+button, a, input, select, textarea { touch-action: manipulation; }
+body { padding-left: env(safe-area-inset-left); padding-right: env(safe-area-inset-right); }
+[role="dialog"] { padding-bottom: max(1.25rem, env(safe-area-inset-bottom)); }
+@media print {
+  body { padding: 0; }
+}

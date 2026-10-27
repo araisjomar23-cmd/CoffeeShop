@@ -24,9 +24,9 @@ async function AuthorizedHomePage() {
   const role = await requireStaffRole();
   return (
     <main className="min-h-screen bg-steam text-roast">
-      <div className="mx-auto max-w-7xl px-4 py-7 sm:px-6 sm:py-9">
+      <div className="mx-auto w-full max-w-7xl px-3 py-5 sm:px-6 sm:py-7 lg:py-9">
         <header className="mb-7 border-b border-roast/10 pb-6 sm:mb-8">
-          <h1 className="font-display text-4xl leading-tight text-roast sm:text-5xl">
+          <h1 className="font-display text-3xl leading-tight text-roast sm:text-4xl lg:text-5xl">
             {SHOP_NAME}
           </h1>
           <StaffNav current="order" role={role} />

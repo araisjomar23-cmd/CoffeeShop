@@ -1,4 +1,5 @@
-import type { Metadata } from "next";
+import ConnectionNotice from "@/components/ConnectionNotice";
+import type { Metadata, Viewport } from "next";
 import { Figtree, Young_Serif } from "next/font/google";
 import { SHOP_NAME } from "@/lib/shop";
 import "./globals.css";
@@ -21,10 +22,16 @@ export const metadata: Metadata = {
   description: `Point of sale for ${SHOP_NAME}`,
 };
 
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
+};
+
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html lang="en" className={`${figtree.variable} ${youngSerif.variable} min-h-full font-sans antialiased`}>
-      <body className="flex min-h-full flex-col">{children}</body>
+      <body className="flex min-h-full flex-col"><ConnectionNotice />{children}</body>
     </html>
   );
 }

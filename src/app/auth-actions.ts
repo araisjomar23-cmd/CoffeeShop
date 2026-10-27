@@ -17,10 +17,10 @@ export async function signIn(formData: FormData) {
 
   const { data: { user } } = await supabase.auth.getUser();
   const { data: profile } = user
-    ? await supabase.from("staff_profiles").select("user_id").eq("user_id", user.id).maybeSingle()
+    ? await supabase.from("staff_profiles").select("user_id, role").eq("user_id", user.id).maybeSingle()
     : { data: null };
 
-  if (!profile) {
+  if (!profile || profile.role !== "owner") {
     await supabase.auth.signOut();
     redirect("/login?error=not-staff");
   }

@@ -26,30 +26,30 @@ async function LoginContent({ searchParams }: LoginPageProps) {
   if (user) {
     const { data: profile } = await supabase
       .from("staff_profiles")
-      .select("user_id")
+      .select("user_id, role")
       .eq("user_id", user.id)
       .maybeSingle();
-    if (profile) redirect("/");
+    if (profile?.role === "owner") redirect("/");
   }
 
   const { error } = await searchParams;
   const message = error === "not-staff"
-    ? "This account is not set up as shop staff. Ask the owner to grant access."
+    ? "Sign in with the owner account to use this POS."
     : error === "credentials"
       ? "Email or password was incorrect."
       : error === "unavailable"
-        ? "Could not verify staff access. Please try again."
+        ? "Could not verify owner access. Please try again."
       : null;
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-steam px-4 py-10 text-roast">
-      <section className="w-full max-w-md rounded-3xl border border-roast/10 bg-counter p-6 shadow-sm sm:p-8">
+    <main className="flex min-h-dvh items-center justify-center bg-steam px-3 py-5 sm:px-4 sm:py-10 text-roast">
+      <section className="w-full max-w-md rounded-3xl border border-roast/10 bg-counter p-5 shadow-sm sm:p-8">
         <div className="flex justify-center">
-          <Image src="/mariteas-logo.png" alt="MariTea’s Burgers & Milk Tea" width={400} height={400} className="mb-2 h-48 w-48 object-contain" priority />
+          <Image src="/mariteas-logo.png" alt="MariTea’s Burgers & Milk Tea" width={400} height={400} className="mb-2 h-28 w-28 sm:h-40 sm:w-40 object-contain" priority />
         </div>
         <p className="text-center text-sm font-semibold uppercase tracking-[0.14em] text-muted">MariTea&apos;s POS</p>
-        <h1 className="mt-2 font-display text-4xl">Staff sign in</h1>
-        <p className="mt-3 text-muted">Sign in with the account provided by the shop owner.</p>
+        <h1 className="mt-2 font-display text-3xl sm:text-4xl">Owner sign in</h1>
+        <p className="mt-3 text-muted">Your orders and daily sales, in one place.</p>
         {message && <p role="alert" className="mt-5 rounded-xl border border-error/30 bg-steam p-3 text-sm font-semibold text-error">{message}</p>}
         <form action={signIn} className="mt-6 space-y-4">
           <label className="block text-sm font-semibold" htmlFor="email">Email

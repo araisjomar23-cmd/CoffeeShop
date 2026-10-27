@@ -181,6 +181,7 @@ export default function OrderScreen({ items, addons }: { items: MenuItem[]; addo
   }
 
   async function handleSaveOrder() {
+    if (!canSubmit) return;
     const requestId = requestIdRef.current ?? crypto.randomUUID();
     requestIdRef.current = requestId;
     try {
@@ -253,7 +254,7 @@ export default function OrderScreen({ items, addons }: { items: MenuItem[]; addo
 
   return (
     <>
-      <div className="grid gap-8 pb-32 lg:grid-cols-[minmax(0,1fr)_25rem] lg:items-start lg:pb-0 2xl:grid-cols-[minmax(0,1fr)_27rem]">
+      <div className="grid min-w-0 gap-5 pb-[calc(8rem+env(safe-area-inset-bottom))] lg:grid-cols-[minmax(0,1fr)_22rem] lg:items-start lg:gap-6 lg:pb-0 xl:grid-cols-[minmax(0,1fr)_25rem]">
         <div className="min-w-0">
           <div className="mb-5 flex items-end justify-between gap-4">
             <h2 className="text-lg font-semibold text-roast">Menu</h2>
@@ -265,7 +266,7 @@ export default function OrderScreen({ items, addons }: { items: MenuItem[]; addo
           <div
             role="group"
             aria-label="Menu categories"
-            className="sticky top-0 z-10 -mx-4 mb-6 flex gap-3 overflow-x-auto bg-steam/95 px-4 py-2 pb-2 backdrop-blur sm:mx-0 sm:px-0 sm:py-2 lg:static lg:bg-transparent lg:py-0 lg:backdrop-blur-0"
+            className="sticky top-0 z-10 -mx-3 mb-4 flex gap-2 overflow-x-auto bg-steam/95 px-3 py-2 pb-2 backdrop-blur sm:mx-0 sm:px-0 sm:py-2 lg:static lg:bg-transparent lg:py-0 lg:backdrop-blur-0"
           >
               {categories.map((category) => {
               const isSelected = category === selectedCategory;
@@ -276,7 +277,7 @@ export default function OrderScreen({ items, addons }: { items: MenuItem[]; addo
                   type="button"
                   aria-pressed={isSelected}
                   onClick={() => setSelectedCategory(category)}
-                  className={`min-h-14 min-w-32 rounded-2xl border px-6 text-base font-semibold transition-colors duration-100 motion-reduce:transition-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-pistachio ${
+                  className={`min-h-12 shrink-0 rounded-xl border px-4 text-sm sm:px-5 sm:text-base font-semibold transition-colors duration-100 motion-reduce:transition-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-pistachio ${
                     isSelected
                       ? "border-pistachio bg-pistachio text-counter"
                       : "border-roast/20 bg-counter text-roast hover:border-pistachio"
@@ -295,10 +296,10 @@ export default function OrderScreen({ items, addons }: { items: MenuItem[]; addo
             >
               {selectedCategory}
             </h3>
-            {displayCards.length === 0 ? <p className="rounded-2xl border border-dashed border-roast/20 bg-counter p-8 text-center text-muted">No items in this category yet.</p> : <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4 md:grid-cols-3">
+            {displayCards.length === 0 ? <p className="rounded-2xl border border-dashed border-roast/20 bg-counter p-8 text-center text-muted">No items in this category yet.</p> : <div className="grid grid-cols-1 gap-3 min-[380px]:grid-cols-2 sm:gap-4 md:grid-cols-3 lg:grid-cols-2 2xl:grid-cols-3">
               {displayCards.map((card) => {
                 if (card.kind === "sized-drink") {
-                  return <article key={`sized-drink-${card.name}`} className="min-w-0 rounded-2xl border border-roast/15 bg-counter p-4 text-roast sm:p-5">
+                  return <article key={`sized-drink-${card.name}`} className="min-w-0 rounded-2xl border border-roast/15 bg-counter p-3 text-roast sm:p-4">
                     <h4 className="mb-4 min-h-7 text-base font-semibold leading-snug sm:text-lg">{card.name}</h4>
                     <div className="grid grid-cols-2 gap-2">{card.sizes.map((item) => {
                       const quantity = productQuantity(cart, item.id);
@@ -348,7 +349,7 @@ export default function OrderScreen({ items, addons }: { items: MenuItem[]; addo
         <aside
           id="order-ticket"
           aria-labelledby="ticket-heading"
-          className="relative scroll-mt-4 overflow-hidden rounded-2xl border border-roast/15 bg-sticky p-5 text-roast shadow-[0_8px_18px_rgba(43,33,28,0.12)] lg:sticky lg:top-6 lg:p-6"
+          className="relative min-w-0 scroll-mt-24 overflow-hidden rounded-2xl border border-roast/15 bg-sticky p-3 text-roast sm:p-5 shadow-[0_8px_18px_rgba(43,33,28,0.12)] lg:sticky lg:top-6 lg:p-6"
         >
           <span aria-hidden="true" className="pointer-events-none absolute right-0 top-0 h-8 w-8 bg-[linear-gradient(225deg,var(--steam)_0_49%,rgba(43,33,28,0.12)_50%,transparent_54%)]" />
           {saveFeedback?.kind === "success" && (
@@ -377,7 +378,7 @@ export default function OrderScreen({ items, addons }: { items: MenuItem[]; addo
       </div>
 
       {customizingItem && <div className="fixed inset-0 z-50 flex items-end justify-center bg-roast/50 p-0 sm:items-center sm:p-4" onMouseDown={(event) => { if (event.target === event.currentTarget) setCustomizingItem(null); }}>
-        <section role="dialog" aria-modal="true" aria-labelledby="customize-item-heading" className="max-h-[90dvh] w-full overflow-y-auto rounded-t-3xl bg-counter p-5 text-roast shadow-2xl sm:max-w-md sm:rounded-2xl">
+        <section role="dialog" aria-modal="true" aria-labelledby="customize-item-heading" className="max-h-[calc(100dvh-1rem)] w-full min-w-0 overflow-y-auto overscroll-contain rounded-t-3xl bg-counter p-5 text-roast shadow-2xl sm:max-w-md sm:rounded-2xl">
           <div className="flex items-start justify-between gap-4">
             <div><h2 id="customize-item-heading" className="font-display text-2xl">{customizingItem.name}</h2><p className="mt-1 text-sm text-muted">Add extras (optional)</p></div>
             <button type="button" onClick={() => setCustomizingItem(null)} className="min-h-11 min-w-11 rounded-full border border-roast/20 text-xl" aria-label="Close item options">×</button>
@@ -412,11 +413,11 @@ export default function OrderScreen({ items, addons }: { items: MenuItem[]; addo
           </button>
           <button
             type="button"
-            onClick={() => void handleSaveOrder()}
+            onClick={() => document.getElementById("order-ticket")?.scrollIntoView({ behavior: "smooth", block: "start" })}
             disabled={!canSubmit}
-            className="inline-flex min-h-14 min-w-36 items-center justify-center rounded-xl bg-pistachio px-5 font-semibold text-counter focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-pistachio disabled:cursor-not-allowed disabled:bg-[#6B6259] disabled:text-white"
+            className="inline-flex min-h-14 shrink-0 items-center justify-center rounded-xl bg-pistachio px-5 font-semibold text-counter focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-pistachio disabled:cursor-not-allowed disabled:bg-[#6B6259] disabled:text-white"
           >
-            {isSaving ? "Saving…" : saveFeedback?.kind === "error" ? "Retry order" : "Place order"}
+            {isSaving ? "Saving…" : "Review order"}
           </button>
         </div>
       </div>
@@ -506,10 +507,10 @@ function TicketPanel({
             return (
               <li
                 key={line.key}
-                className="flex items-center justify-between gap-3 border-b border-dashed border-roast/30 py-4 first:pt-0 motion-safe:animate-[ticket-pop_120ms_ease-out] motion-reduce:animate-none"
+                className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-3 border-b border-dashed border-roast/30 py-4 first:pt-0 motion-safe:animate-[ticket-pop_120ms_ease-out] motion-reduce:animate-none"
               >
-                <div className="min-w-0 flex-1">
-                  <p className="truncate font-semibold">{line.item.name}</p>
+                <div className="col-span-2 min-w-0">
+                  <p className="break-words font-semibold">{line.item.name}</p>
                   {line.addons.length > 0 && <p className="mt-1 text-xs text-muted">+ {line.addons.map((addon) => addon.name).join(", ")}</p>}
                   <p className="mt-1 text-sm text-muted tabular-nums">
                     {line.quantity} × {formatPeso(unitTotalCentavos)}
@@ -554,7 +555,7 @@ function TicketPanel({
                     +
                   </button>
                 </div>
-                <p className="w-20 text-right font-semibold tabular-nums">
+                <p className="min-w-0 break-words text-right font-semibold tabular-nums">
                   {formatPeso(lineTotalCentavos)}
                 </p>
               </li>
@@ -623,7 +624,7 @@ function TicketPanel({
             role="alert"
             className="rounded-xl border border-error/30 bg-counter p-3 text-sm text-error"
           >
-            <span className="block font-semibold">Couldn&apos;t save the order. Your ticket is still here; edit it or retry.</span>
+            <span className="block font-semibold">Couldn&apos;t save the order. Your ticket is still here. Retry without changes, or check Orders before editing to avoid a duplicate.</span>
             {saveFeedback.detail && <span className="mt-1 block break-words text-xs text-roast/75">{saveFeedback.detail}</span>}
           </p>
         )}
@@ -634,7 +635,7 @@ function TicketPanel({
           disabled={!canSubmit}
           className="min-h-14 w-full rounded-xl bg-pistachio px-5 font-semibold text-counter hover:bg-pistachio/90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-pistachio disabled:cursor-not-allowed disabled:bg-[#6B6259] disabled:text-white"
         >
-          {isSaving ? "Saving order…" : saveFeedback ? "Retry order" : "Place order"}
+          {isSaving ? "Saving order…" : saveFeedback ? "Retry order" : "Payment received - Save"}
         </button>
       </div>
     </div>

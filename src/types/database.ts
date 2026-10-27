@@ -39,6 +39,12 @@ export type Database = {
   }
   public: {
     Tables: {
+      order_payment_events: {
+        Row: { id: string; order_id: string; amount_centavos: number; payment_method: string; reason: string; created_at: string; created_by: string | null }
+        Insert: never
+        Update: never
+        Relationships: []
+      }
       staff_profiles: {
         Row: {
           created_at: string
@@ -245,6 +251,7 @@ export type Database = {
       }
       orders: {
         Row: {
+          revision: number
           cancellation_reason: string | null
           cash_received_centavos: number | null
           created_at: string
@@ -327,11 +334,11 @@ export type Database = {
         }[]
       }
       cancel_order: {
-        Args: { p_order_id: string; p_reason: string }
+        Args: { p_order_id: string; p_reason: string; p_expected_revision: number; p_refund_confirmed: boolean }
         Returns: undefined
       }
       edit_active_order: {
-        Args: { p_order_id: string; p_customer_name: string; p_order_type: string; p_items: Json }
+        Args: { p_order_id: string; p_customer_name: string; p_order_type: string; p_items: Json; p_expected_revision: number; p_payment_confirmed: boolean }
         Returns: undefined
       }
       transition_order: {

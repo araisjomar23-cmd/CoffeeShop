@@ -17,7 +17,7 @@ export async function requireStaffRole(allowedRoles?: StaffRole[]): Promise<Staf
 
   if (error) redirect("/login?error=unavailable");
 
-  if (!profile || (profile.role !== "owner" && profile.role !== "cashier")) {
+  if (!profile || profile.role !== "owner") {
     await supabase.auth.signOut();
     redirect("/login?error=not-staff");
   }

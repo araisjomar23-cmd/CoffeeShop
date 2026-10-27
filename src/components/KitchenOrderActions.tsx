@@ -16,6 +16,7 @@ export default function KitchenOrderActions({ orderId, status }: { orderId: stri
     if (!nextStatus) return;
     setSaving(true);
     setError(null);
+    try {
     const result = await transitionOrder(orderId, nextStatus);
     setSaving(false);
     if (!result.ok) {
@@ -23,6 +24,9 @@ export default function KitchenOrderActions({ orderId, status }: { orderId: stri
       return;
     }
     router.refresh();
+    } catch {
+      setError("Connection interrupted. Refresh to check the order status.");
+    } finally { setSaving(false); }
   }
 
   return (

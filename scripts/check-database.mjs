@@ -1,0 +1,70 @@
+﻿// Run with POS_TEST_PGLITE pointing to an installed @electric-sql/pglite package.
+// This uses an in-memory database only; no live Supabase credentials are read.
+const { createRequire } = await import('node:module');
+const { readFile, readdir } = await import('node:fs/promises');
+const { default: assert } = await import('node:assert/strict');
+const require = createRequire(import.meta.url);
+const { PGlite } = require(process.env.POS_TEST_PGLITE || '@electric-sql/pglite');
+const db = new PGlite();
+try {
+await db.exec(`CREATE ROLE anon; CREATE ROLE authenticated; CREATE SCHEMA auth;
+CREATE TABLE auth.users(id uuid PRIMARY KEY);
+CREATE FUNCTION auth.uid() RETURNS uuid LANGUAGE sql AS $$ SELECT nullif(current_setting('request.jwt.claim.sub',true),'')::uuid $$;
+GRANT USAGE ON SCHEMA public,auth TO authenticated,anon;`);
+for (const name of (await readdir('supabase/migrations')).filter(name => name.endsWith('.sql')).sort()) {
+  await db.exec(await readFile('supabase/migrations/' + name, 'utf8'));
+}
+console.log('PASS: all migrations applied');
+const owner='10000000-0000-4000-8000-000000000001';
+const outsider='10000000-0000-4000-8000-000000000002';
+await db.query('INSERT INTO auth.users VALUES ($1),($2)',[owner,outsider]);
+await db.query("INSERT INTO public.staff_profiles(user_id,role) VALUES ($1,'owner')",[owner]);
+await db.query("SELECT set_config('request.jwt.claim.sub',$1,false)",[owner]);
+const menu=(await db.query("SELECT id FROM public.menu_items WHERE is_active AND category <> 'Add-ons' LIMIT 1")).rows[0].id;
+const items=JSON.stringify([{menu_item_id:menu,quantity:1,note:'',addon_ids:[]}]);
+await db.query("INSERT INTO public.ingredients(id,name,unit,quantity_on_hand) VALUES ('30000000-0000-4000-8000-000000000001','Retired stock','g',0)");
+await db.query("INSERT INTO public.menu_item_recipes(menu_item_id,ingredient_id,quantity_per_item) VALUES ($1,'30000000-0000-4000-8000-000000000001',100)",[menu]);
+await db.exec('SET ROLE authenticated');
+const saved=(await db.query("SELECT * FROM public.create_order_idempotent('20000000-0000-4000-8000-000000000001','Test',$1::jsonb,'takeaway','cash')",[items])).rows[0];
+const order=async()=> (await db.query('SELECT * FROM public.orders WHERE id=$1',[saved.order_id])).rows[0];
+let row=await order();
+const originalTotal=row.total_centavos;
+const line=(await db.query('SELECT id FROM public.order_items WHERE order_id=$1',[row.id])).rows[0].id;
+let edits=JSON.stringify([{order_item_id:line,quantity:1,note:'less ice'}]);
+await db.query("SELECT public.edit_active_order($1,'Corrected','takeaway',$2::jsonb,$3,false)",[row.id,edits,row.revision]);
+console.log('PASS: cash order note correction without cash tender');
+await assert.rejects(db.query("SELECT public.edit_active_order($1,'Stale','takeaway',$2::jsonb,$3,false)",[row.id,edits,row.revision]),/changed/);
+row=await order();edits=JSON.stringify([{order_item_id:line,quantity:2,note:''}]);
+await assert.rejects(db.query("SELECT public.edit_active_order($1,'Test','takeaway',$2::jsonb,$3,false)",[row.id,edits,row.revision]),/Confirm/);
+await db.query("SELECT public.edit_active_order($1,'Test','takeaway',$2::jsonb,$3,true)",[row.id,edits,row.revision]);
+console.log('PASS: stale edits rejected and price changes require settlement');
+await db.query("SELECT public.transition_order($1,'ready')",[row.id]);
+await db.query("SELECT public.transition_order($1,'completed')",[row.id]);
+console.log('PASS: completion without inventory');
+row=await order();
+await assert.rejects(db.query("SELECT public.cancel_order($1,'Test refund',$2,false)",[row.id,row.revision]),/refund/);
+await db.query("SELECT public.cancel_order($1,'Test refund',$2,true)",[row.id,row.revision]);
+await db.query("SELECT public.cancel_order($1,'Retry refund',$2,true)",[row.id,row.revision]);
+const events=(await db.query('SELECT amount_centavos FROM public.order_payment_events WHERE order_id=$1',[row.id])).rows;
+assert.equal(events.length,3);assert.equal(events.reduce((n,e)=>n+e.amount_centavos,0),0);
+assert.deepEqual(events.map(e=>e.amount_centavos).sort((a,b)=>a-b),[-2*originalTotal,originalTotal,originalTotal]);
+console.log('PASS: payments, adjustments and one refund balance correctly');
+await assert.rejects(db.query("SELECT public.create_ingredient('Disabled','g',1)"),/permission denied/);
+const wallet=(await db.query("SELECT * FROM public.create_order_idempotent('20000000-0000-4000-8000-000000000003','Wallet',$1::jsonb,'takeaway','e_wallet')",[items])).rows[0];
+const retry=(await db.query("SELECT * FROM public.create_order_idempotent('20000000-0000-4000-8000-000000000003','Wallet',$1::jsonb,'takeaway','e_wallet')",[items])).rows[0];
+assert.equal(wallet.order_id,retry.order_id);
+const walletRow=(await db.query('SELECT * FROM public.orders WHERE id=$1',[wallet.order_id])).rows[0];
+const walletLine=(await db.query('SELECT id FROM public.order_items WHERE order_id=$1',[wallet.order_id])).rows[0].id;
+const walletEdit=JSON.stringify([{order_item_id:walletLine,quantity:2,note:''}]);
+await assert.rejects(db.query("SELECT public.edit_active_order($1,'Wallet','takeaway',$2::jsonb,$3,false)",[wallet.order_id,walletEdit,walletRow.revision]),/Confirm/);
+await db.query("SELECT public.edit_active_order($1,'Wallet','takeaway',$2::jsonb,$3,true)",[wallet.order_id,walletEdit,walletRow.revision]);
+const walletEvents=(await db.query('SELECT amount_centavos FROM public.order_payment_events WHERE order_id=$1',[wallet.order_id])).rows;
+assert.equal(walletEvents.length,2);
+assert.equal(walletEvents.reduce((sum,e)=>sum+e.amount_centavos,0),2*wallet.total_centavos);
+console.log('PASS: GCash adjustment and duplicate checkout retry');
+await db.query("SELECT set_config('request.jwt.claim.sub',$1,false)",[outsider]);
+await assert.rejects(db.query("SELECT * FROM public.create_order_idempotent('20000000-0000-4000-8000-000000000002','Test',$1::jsonb,'takeaway','cash')",[items]),/staff/);
+await assert.rejects(db.query("SELECT public.cancel_order($1,'Test refund',0,true)",[row.id]),/Owner access/);
+assert.equal((await db.query('SELECT * FROM public.orders')).rows.length,0);
+console.log('PASS: non-staff access denied and inventory RPC retired');
+} finally { await db.close(); }
