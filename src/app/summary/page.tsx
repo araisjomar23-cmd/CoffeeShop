@@ -5,10 +5,13 @@ import { connection } from "next/server";
 import { Suspense } from "react";
 import { formatPeso } from "@/lib/money";
 import { requireStaffRole } from "@/lib/auth";
-import StaffNav from "@/components/StaffNav";
+import Icon from "@/components/Icon";
+import PageHeader from "@/components/PageHeader";
 import { createClient } from "@/lib/supabase/server";
 import type { Tables } from "@/types/database";
 import RouteLoading from "@/components/RouteLoading";
+import SalesDatePicker from "@/components/SalesDatePicker";
+import styles from "./sales.module.css";
 
 type Order = Tables<"orders">;
 type OrderItem = Tables<"order_items">;
@@ -27,13 +30,10 @@ async function AuthorizedSummaryPage({ searchParams }: { searchParams: SearchPar
   await connection();
   const role = await requireStaffRole(["owner"]);
   return (
-    <main className="min-h-screen bg-steam text-roast">
-      <div className="mx-auto w-full max-w-6xl px-3 py-5 sm:px-6 sm:py-7 lg:py-9">
-        <header className="mb-7 border-b border-roast/10 pb-6 sm:mb-8">
-          <h1 className="font-display text-3xl leading-tight sm:text-4xl lg:text-5xl">Sales summary</h1>
-          <StaffNav current="sales" role={role} />
-        </header>
-        <Suspense key={(await searchParams).date?.toString() ?? "today"} fallback={<p role="status" className="rounded-2xl bg-counter p-6">Loading sales for this date...</p>}>
+    <main className={styles.page}>
+      <div className={styles.container}>
+        <PageHeader current="sales" role={role} title="Sales overview" description="Sales, favorites, and the numbers behind every cup." />
+        <Suspense key={(await searchParams).date?.toString() ?? "today"} fallback={<RouteLoading screen="sales" title="Sales overview" contentOnly />}>
           <SummaryContent searchParams={searchParams} />
         </Suspense>
       </div>
@@ -53,7 +53,6 @@ async function SummaryContent({ searchParams }: { searchParams: SearchParams }) 
     weekday: "long",
     month: "long",
     day: "numeric",
-    year: "numeric",
   }).format(new Date(`${date}T12:00:00+08:00`));
   const today = manilaToday();
   const previousDate = shiftDate(date, -1);
@@ -84,144 +83,104 @@ async function SummaryContent({ searchParams }: { searchParams: SearchParams }) 
   const { salesOrders, cancelledOrders, salesCentavos, averageCentavos, paymentTotals, unrecordedCount, rankedItems } = summarizeSales(orders);
   const collections = summarizeCollections(paymentEvents);
 
+  const paymentTotal = paymentTotals.cash + paymentTotals.e_wallet + paymentTotals.card + paymentTotals.unrecorded;
   return (
     <>
-      <section aria-label="Date navigation" className="mb-6 rounded-2xl border border-roast/10 bg-counter p-4 sm:p-5">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div className="min-w-0"><p className="text-xs font-semibold uppercase tracking-wide text-muted">{date === today ? "Today's sales" : "Sales for"}</p><h2 className="mt-1 font-display text-xl sm:text-2xl">{dateLabel}</h2></div>
-          <Link href="/summary" className="inline-flex min-h-10 shrink-0 items-center rounded-lg border border-roast/15 px-3 text-sm font-semibold hover:bg-steam">{date === today ? "Refresh" : "Today"}</Link>
-        </div>
-        <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-[auto_minmax(0,1fr)_auto] sm:items-end">
-          <form action="/summary" className="col-span-2 grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-end gap-2 sm:col-span-1 sm:order-2">
-            <label className="min-w-0 text-xs font-semibold text-muted">Choose date<input key={date} type="date" name="date" required max={today} defaultValue={date} className="mt-1 min-h-11 w-full rounded-lg border border-roast/15 bg-steam px-3 text-roast" /></label>
-            <button className="min-h-11 rounded-lg bg-pistachio px-4 text-sm font-semibold text-counter hover:bg-pistachio/90">View</button>
-          </form>
-          <Link href={`/summary?date=${previousDate}`} className="inline-flex min-h-11 items-center justify-center rounded-lg border border-roast/15 px-2 text-xs font-semibold hover:bg-steam sm:order-1 sm:px-3 sm:text-sm">Previous day</Link>
-          {date < today ? <Link href={`/summary?date=${nextDate}`} className="inline-flex min-h-11 items-center justify-center rounded-lg border border-roast/15 px-2 text-xs font-semibold hover:bg-steam sm:order-3 sm:px-3 sm:text-sm">Next day</Link> : <span aria-disabled="true" className="inline-flex min-h-11 items-center justify-center rounded-lg bg-steam px-2 text-xs text-muted sm:order-3 sm:px-3 sm:text-sm">Next day</span>}
+      <section aria-label="Date navigation" className={styles.toolbar}>
+        <div><p className={styles.eyebrow}>{date === today ? "Today's sales" : "Sales for"}</p><h2 className={styles.dateTitle}>{dateLabel}</h2></div>
+        <div className={styles.dateActions}>
+          <Link aria-label="Previous day" href={`/summary?date=${previousDate}`} className={styles.dateArrow}><Icon name="left" /></Link>
+          <SalesDatePicker date={date} today={today} />
+          {date < today ? <Link aria-label="Next day" href={`/summary?date=${nextDate}`} className={styles.dateArrow}><Icon name="right" /></Link> : <span aria-label="Next day" aria-disabled="true" className={styles.dateArrow}><Icon name="right" /></span>}
+          <a href={`/summary/export?date=${date}`} className={styles.download}><Icon name="download" />Download PDF</a>
         </div>
       </section>
-      <section aria-labelledby="at-a-glance-heading" className="mb-6">
-        <div className="mb-3"><h2 id="at-a-glance-heading" className="font-display text-xl sm:text-2xl">At a glance</h2><p className="mt-1 text-xs text-muted sm:text-sm">Order totals for {date === today ? "today" : dateLabel}.</p></div>
-        <div aria-label="Sales statistics" className="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-4">
-        <StatTile label="Order sales" value={formatPeso(salesCentavos)} valueClassName="text-counter" featured />
-        <StatTile label="Orders (not cancelled)" value={String(salesOrders.length)} />
+      <section aria-label="Sales statistics" className={styles.stats}>
+        <StatTile label="Order sales" value={formatPeso(salesCentavos)} featured />
+        <StatTile label="Orders" value={String(salesOrders.length)} />
         <StatTile label="Average order" value={averageCentavos === null ? "--" : formatPeso(averageCentavos)} />
-        <StatTile label="Cancelled orders" value={String(cancelledOrders.length)} valueClassName="text-error" />
-        </div>
-        <p className="mt-2 text-xs leading-relaxed text-muted">Includes active orders, even while they are being prepared. Cancelled orders are excluded.</p>
+        <StatTile label="Cancelled" value={String(cancelledOrders.length)} cancelled />
       </section>
-      <section aria-labelledby="reports-heading" className="mb-6 rounded-2xl border border-roast/10 bg-counter p-4 sm:p-5">
-        <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
-          <div><h2 id="reports-heading" className="font-display text-xl sm:text-2xl">Reports</h2><p className="mt-1 text-xs text-muted sm:text-sm">Download daily or date-range sales details.</p></div>
-          <a href={`/summary/export?date=${date}`} className="inline-flex min-h-11 w-full items-center justify-center rounded-lg bg-pistachio px-4 text-center text-sm font-semibold text-counter hover:bg-pistachio/90 sm:w-auto">Download daily PDF</a>
-        </div>
-        <form action="/summary/export" method="get" className="grid min-w-0 gap-3 rounded-xl border border-roast/10 bg-steam/50 p-3 sm:grid-cols-2 sm:p-4 xl:grid-cols-[minmax(0,1fr)_minmax(9rem,auto)_minmax(9rem,auto)_auto] xl:items-end">
-          <div className="min-w-0 sm:col-span-2 xl:col-span-1"><h3 className="font-semibold">Export a date range</h3><p className="mt-1 text-xs text-muted sm:text-sm">Download sales and order details for up to one year.</p></div>
-          <label className="block min-w-0 text-sm font-semibold">From<input type="date" name="startDate" required defaultValue={date} className="mt-1 min-h-11 w-full rounded-lg border border-roast/20 bg-counter px-3 font-normal" /></label>
-          <label className="block min-w-0 text-sm font-semibold">To<input type="date" name="endDate" required defaultValue={date} className="mt-1 min-h-11 w-full rounded-lg border border-roast/20 bg-counter px-3 font-normal" /></label>
-          <button className="inline-flex min-h-11 w-full items-center justify-center rounded-lg border border-roast/10 bg-counter px-4 text-sm font-semibold hover:border-pistachio sm:col-span-2 xl:col-span-1">Download range PDF</button>
+      <div className={styles.overview}>
+        <section aria-labelledby="payments-heading" className={styles.panel}>
+          <h2 id="payments-heading">Payments</h2>
+          <div className={styles.paymentBar} aria-hidden="true">
+            {paymentTotal > 0 && <>
+              <span style={{ width: `${paymentTotals.cash / paymentTotal * 100}%`, background: "#304d3e" }} />
+              <span style={{ width: `${paymentTotals.e_wallet / paymentTotal * 100}%`, background: "#c77d27" }} />
+              <span style={{ width: `${(paymentTotals.card + paymentTotals.unrecorded) / paymentTotal * 100}%`, background: "#a4aaa4" }} />
+            </>}
+          </div>
+          <dl className={styles.paymentAmounts}>
+            <PaymentTile label="Cash" amount={paymentTotals.cash} />
+            <PaymentTile label="GCash" amount={paymentTotals.e_wallet} />
+            {paymentTotals.card > 0 && <PaymentTile label="Card" amount={paymentTotals.card} />}
+            {unrecordedCount > 0 && <PaymentTile label="Method not recorded" amount={paymentTotals.unrecorded} />}
+          </dl>
+          <p className={styles.refunds}>{date === today ? "Refunds today:" : "Refunds this day:"} <strong>{formatPeso(collections.returned)}</strong></p>
+          <details className={styles.extraDetails}>
+            <summary>Collection details</summary>
+            <p>Payment totals above include active orders and exclude cancelled orders.</p>
+            {unrecordedCount > 0 && <p>{unrecordedCount} older orders have no payment method recorded.</p>}
+            {paymentEvents.length === 0 ? <p>No payment movements recorded for this date.</p> : <dl className={styles.paymentAmounts}>
+              <PaymentTile label="Received" amount={collections.received} />
+              <PaymentTile label="Returned" amount={collections.returned} />
+              <PaymentTile label="Net cash" amount={collections.cash} />
+              <PaymentTile label="Net GCash" amount={collections.e_wallet} />
+              {collections.card !== 0 && <PaymentTile label="Net card" amount={collections.card} />}
+            </dl>}
+            <p>Collections reflect money movements on this date. Refunds for older cancelled orders may be unavailable if they were not recorded at the time.</p>
+          </details>
+        </section>
+        <section aria-labelledby="top-items-heading" className={styles.panel}>
+          <h2 id="top-items-heading">Top items</h2>
+          {rankedItems.length === 0 ? <p className={styles.empty}>No items sold.</p> : <ol className={styles.topItems}>
+            {rankedItems.map((item, index) => <li key={item.name}><span>{index + 1}. {item.name}</span><strong>{item.quantity}</strong></li>)}
+          </ol>}
+        </section>
+      </div>
+      <section aria-labelledby="orders-heading" className={`${styles.panel} ${styles.orders}`}>
+        <div className={styles.panelHeading}><h2 id="orders-heading">Orders</h2><span>Newest first</span></div>
+        {orders.length === 0 ? <p className={styles.empty}>No orders for this day yet.</p> : <ul className={styles.orderList}>
+          {orders.map((order) => <li key={order.id}>
+            <details>
+              <summary className={styles.orderSummary}>
+                <span className={styles.orderNumber}>#{String(order.order_number).padStart(3, "0")}</span>
+                <span className={styles.itemSummary}>{summarizeItems(order.order_items)}</span>
+                <StatusBadge status={order.status} />
+                <span className={`${styles.orderTotal} ${order.status === "cancelled" ? styles.cancelledTotal : ""}`}>{formatPeso(order.total_centavos)}</span>
+              </summary>
+              <OrderCard order={order} />
+            </details>
+          </li>)}
+        </ul>}
+      </section>
+      <details className={`${styles.panel} ${styles.rangeExport}`}>
+        <summary>Export a date range</summary>
+        <form action="/summary/export" method="get" className={styles.rangeForm}>
+          <label>From<input type="date" name="startDate" required defaultValue={date} max={today} /></label>
+          <label>To<input type="date" name="endDate" required defaultValue={date} max={today} /></label>
+          <button className={styles.download}><Icon name="download" />Download range PDF</button>
         </form>
-      </section>
-      <section aria-labelledby="payment-summary-heading" className="mb-6">
-        <div className="mb-3"><h2 id="payment-summary-heading" className="font-display text-xl sm:text-2xl">Payments</h2><p className="mt-1 text-xs text-muted sm:text-sm">See what orders were marked as paid and what money was recorded.</p></div>
-        <div className="grid gap-3 lg:grid-cols-2">
-        <article className="min-w-0 rounded-2xl border border-roast/10 bg-counter p-4 sm:p-5">
-        <h3 className="font-semibold">Order sales by payment method</h3>
-        <p className="mt-1 text-xs text-muted">Based on the payment method saved on each order.</p>
-        <dl className="mt-4 grid grid-cols-2 gap-2 sm:gap-3">
-          <PaymentTile label="Cash orders" amount={paymentTotals.cash} />
-          <PaymentTile label="GCash orders" amount={paymentTotals.e_wallet} />
-          {paymentTotals.card > 0 && <PaymentTile label="Card (older orders)" amount={paymentTotals.card} />}
-          {unrecordedCount > 0 && <PaymentTile label="Method not recorded" amount={paymentTotals.unrecorded} />}
-        </dl>
-        {unrecordedCount > 0 && <p className="mt-3 rounded-xl bg-sticky/50 p-3 text-sm">{unrecordedCount} older {unrecordedCount === 1 ? "order has" : "orders have"} no payment method recorded. Their value is included in order sales, but cannot be assigned to cash or GCash.</p>}
-        </article>
-        <article className="min-w-0 rounded-2xl border border-roast/10 bg-counter p-4 sm:p-5">
-          <h3 className="font-semibold">Collections and refunds</h3>
-          <p className="mt-1 text-xs text-muted">Actual money movements recorded on {date === today ? "today" : dateLabel}. Refunds for older cancelled orders may be unavailable if they were not recorded at the time.</p>
-          {paymentEvents.length === 0 ? <p className="mt-4 rounded-xl bg-steam p-3 text-sm leading-relaxed text-muted">No payment movements recorded for this date. This can differ from order sales, especially for older orders.</p> : <dl className="mt-4 grid grid-cols-2 gap-2 sm:gap-3">
-            <PaymentTile label="Received" amount={collections.received} />
-            <PaymentTile label="Returned" amount={collections.returned} />
-            <PaymentTile label="Net cash" amount={collections.cash} />
-            <PaymentTile label="Net GCash" amount={collections.e_wallet} />
-            {collections.card !== 0 && <PaymentTile label="Net card (older orders)" amount={collections.card} />}
-          </dl>}
-        </article>
-        </div>
-      </section>
-      <section aria-labelledby="daily-orders-heading" className="mb-6">
-        <div className="mb-3"><h2 id="daily-orders-heading" className="font-display text-xl sm:text-2xl">Orders</h2><p className="mt-1 text-xs text-muted sm:text-sm">Order details and current status for this date.</p></div>
-        {orders.length === 0 ? (
-          <p className="rounded-2xl border border-dashed border-roast/20 bg-counter p-8 text-center text-roast">No orders for this day yet.</p>
-        ) : (
-          <>
-            <div className="hidden overflow-x-auto rounded-2xl border border-roast/10 bg-counter xl:block">
-              <table className="w-full min-w-[720px] border-collapse text-left">
-                <thead className="border-b border-roast/15 bg-steam/60 text-sm text-muted">
-                  <tr><th className="px-4 py-3">Order</th><th className="px-4 py-3">Time</th><th className="px-4 py-3">Customer</th><th className="px-4 py-3">Items and notes</th><th className="px-4 py-3 text-right">Total and payment</th><th className="px-4 py-3">Status / actions</th></tr>
-                </thead>
-                <tbody className="divide-y divide-roast/10">
-                  {orders.map((order) => <OrderTableRow key={order.id} order={order} />)}
-                </tbody>
-              </table>
-            </div>
-            <ul className="grid gap-3 md:grid-cols-2 xl:hidden">
-              {orders.map((order) => <OrderCard key={order.id} order={order} />)}
-            </ul>
-          </>
-        )}
-      </section>
-      <section aria-labelledby="best-sellers-heading" className="mb-6 rounded-2xl border border-roast/10 bg-counter p-4 sm:p-5">
-        <h2 id="best-sellers-heading" className="font-display text-xl sm:text-2xl">Top items</h2>
-        <p className="mt-1 text-xs text-muted sm:text-sm">Most ordered items for this date.</p>
-      {rankedItems.length === 0 ? (
-          <p className="mt-4 text-muted">No items sold.</p>
-        ) : (
-          <ol className="mt-4 divide-y divide-roast/10">
-            {rankedItems.map((item, index) => (
-              <li key={item.name} className="flex min-h-12 items-center gap-4 py-2">
-                <span className="w-8 font-display text-xl text-muted">{index + 1}</span>
-                <span className="flex-1 font-semibold">{item.name}</span>
-                <span className="tabular-nums text-muted">{item.quantity} sold</span>
-              </li>
-            ))}
-          </ol>
-        )}
-      </section>
-
+        <p className={styles.eyebrow}>Download sales and order details for up to one year.</p>
+      </details>
     </>
   );
 }
 
 function PaymentTile({ label, amount }: { label: string; amount: number }) {
-  return <div className="min-w-0 rounded-xl border border-roast/5 bg-steam/70 p-3"><dt className="text-xs font-semibold text-muted sm:text-sm">{label}</dt><dd className="mt-1 break-words font-semibold tabular-nums">{formatPeso(amount)}</dd></div>;
+  return <div><dt>{label}</dt><dd>{formatPeso(amount)}</dd></div>;
 }
 
-function StatTile({ label, value, valueClassName = "text-roast", featured = false }: { label: string; value: string | null; valueClassName?: string; featured?: boolean }) {
-  return (
-    <div className={`min-w-0 rounded-2xl border p-3 sm:p-5 ${featured ? "border-pistachio bg-pistachio text-counter" : "border-roast/10 bg-counter"}`}>
-      <p className={`text-xs font-semibold sm:text-sm ${featured ? "text-counter/75" : "text-muted"}`}>{label}</p>
-      {value !== null && <p className={`mt-2 break-words font-display text-xl tabular-nums sm:text-3xl ${valueClassName}`}>{value}</p>}
-    </div>
-  );
+function StatTile({ label, value, featured = false, cancelled = false }: { label: string; value: string; featured?: boolean; cancelled?: boolean }) {
+  return <div className={`${styles.stat} ${featured ? styles.featured : ""}`}>
+    <p>{label}</p><strong className={cancelled ? styles.cancelledValue : undefined}>{value}</strong>
+    {featured && <small>Includes orders still being prepared</small>}
+  </div>;
 }
-
-function OrderTableRow({ order }: { order: OrderWithItems }) {
-  return (
-    <tr>
-      <td className="whitespace-nowrap px-4 py-4 font-semibold">#{order.order_number}<span className="mt-1 block text-xs font-normal capitalize text-muted">{order.order_type?.replace("_", " ") ?? "Legacy order"}</span></td>
-      <td className="whitespace-nowrap px-4 py-4 tabular-nums">{formatManilaTime(order.created_at)}</td>
-      <td className="px-4 py-4">{order.customer_name?.trim() || "No name"}</td>
-      <td className="px-4 py-4">{summarizeItems(order.order_items)}{order.order_items.some((item) => item.note) && <ul className="mt-2 space-y-1 text-xs text-muted">{order.order_items.filter((item) => item.note).map((item, index) => <li key={`${item.item_name}-${index}`}>{item.item_name}: {item.note}</li>)}</ul>}</td>
-      <td className="whitespace-nowrap px-4 py-4 text-right tabular-nums"><span className="font-semibold">{formatPeso(order.total_centavos)}</span><span className="mt-1 block text-xs text-muted">{paymentLabel(order.payment_method)}{order.cash_received_centavos !== null && ` · received ${formatPeso(order.cash_received_centavos)} · change ${formatPeso(order.change_centavos ?? 0)}`}</span></td>
-      <td className="px-4 py-4"><StatusBadge status={order.status} />{order.cancellation_reason && <p className="mt-1 max-w-44 text-xs text-error">Reason: {order.cancellation_reason}</p>}</td>
-    </tr>
-  );
-}
-
 function OrderCard({ order }: { order: OrderWithItems }) {
   return (
-    <li className="rounded-2xl border border-roast/10 bg-counter p-4">
+    <div className="rounded-xl bg-steam/50 p-4">
       <div className="flex min-w-0 items-start justify-between gap-2">
         <div className="min-w-0"><p className="font-display text-xl">Order #{order.order_number}</p><p className="break-words text-sm capitalize text-muted">{order.order_type?.replace("_", " ") ?? "Legacy order"} · {paymentLabel(order.payment_method)}</p><p className="break-words text-sm text-muted">{formatManilaTime(order.created_at)} · {order.customer_name?.trim() || "No name"}</p></div>
         <StatusBadge status={order.status} />
@@ -231,12 +190,12 @@ function OrderCard({ order }: { order: OrderWithItems }) {
       <p className="mt-3 text-right font-semibold tabular-nums">{formatPeso(order.total_centavos)}</p>
       {order.cash_received_centavos !== null && <p className="text-right text-xs text-muted">Received {formatPeso(order.cash_received_centavos)} · change {formatPeso(order.change_centavos ?? 0)}</p>}
       {order.cancellation_reason && <p className="mt-2 text-xs text-error">Cancellation reason: {order.cancellation_reason}</p>}
-    </li>
+    </div>
   );
 }
 
 function StatusBadge({ status }: { status: string }) {
-  return <span className="inline-flex min-h-8 items-center rounded-full bg-steam px-3 text-xs font-semibold capitalize text-roast">{status}</span>;
+  return <span className={`${styles.badge} ${status === "cancelled" ? styles.cancelledBadge : status === "completed" ? styles.completedBadge : styles.preparingBadge}`}>{status === "new" ? "Preparing" : status.replaceAll("_", " ")}</span>;
 }
 
 function paymentLabel(method: string | null) {

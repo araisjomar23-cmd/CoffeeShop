@@ -2,9 +2,8 @@ import { Suspense } from "react";
 import { connection } from "next/server";
 import OrderScreen from "@/components/OrderScreen";
 import { createClient } from "@/lib/supabase/server";
-import { SHOP_NAME } from "@/lib/shop";
 import { requireStaffRole } from "@/lib/auth";
-import StaffNav from "@/components/StaffNav";
+import PageHeader from "@/components/PageHeader";
 import RouteLoading from "@/components/RouteLoading";
 import type { Tables } from "@/types/database";
 
@@ -24,18 +23,10 @@ async function AuthorizedHomePage() {
   const role = await requireStaffRole();
   return (
     <main className="min-h-screen bg-steam text-roast">
-      <div className="mx-auto w-full max-w-7xl px-3 py-5 sm:px-6 sm:py-7 lg:py-9">
-        <header className="mb-7 border-b border-roast/10 pb-6 sm:mb-8">
-          <h1 className="font-display text-3xl leading-tight text-roast sm:text-4xl lg:text-5xl">
-            {SHOP_NAME}
-          </h1>
-          <StaffNav current="order" role={role} />
-          <p className="mt-2 text-base text-muted">
-            Tap a category to browse the menu.
-          </p>
-        </header>
+      <div className="cafe-shell cafe-workspace">
+        <PageHeader current="order" role={role} title="New order" description="Pick a favorite, add the extras, and make someone's day." />
 
-        <Suspense fallback={<MenuLoading />}>
+        <Suspense fallback={<RouteLoading screen="order" title="New order" contentOnly />}>
           <MenuItems />
         </Suspense>
       </div>

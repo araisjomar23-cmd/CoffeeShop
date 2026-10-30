@@ -1,19 +1,26 @@
 import Link from "next/link";
-import { signOut } from "@/app/auth-actions";
+import Image from "next/image";
+import Icon from "@/components/Icon";
+import SignOutButton from "@/components/SignOutButton";
 import type { StaffRole } from "@/lib/auth";
+import { SHOP_NAME } from "@/lib/shop";
 
 export default function StaffNav({ current, role }: { current: "order" | "kitchen" | "sales"; role: StaffRole }) {
-  const activeClass = "inline-flex min-h-12 min-w-0 items-center justify-center rounded-xl bg-pistachio px-3 text-center text-sm font-semibold text-counter sm:px-5 sm:text-base";
-  const inactiveClass = "inline-flex min-h-12 min-w-0 items-center justify-center rounded-xl border border-roast/20 bg-counter px-3 text-center text-sm font-semibold text-roast hover:border-pistachio focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-pistachio sm:px-5 sm:text-base";
+  const activeClass = "cafe-nav-link cafe-nav-active";
+  const inactiveClass = "cafe-nav-link";
 
   return (
-    <nav aria-label="Main navigation" className="mt-5 grid grid-cols-3 gap-2 sm:flex sm:flex-wrap sm:gap-3">
-      <Link aria-current={current === "order" ? "page" : undefined} href="/" className={current === "order" ? activeClass : inactiveClass}>New order</Link>
-      <Link aria-current={current === "kitchen" ? "page" : undefined} href="/kitchen" className={current === "kitchen" ? activeClass : inactiveClass}>Orders</Link>
-      {role === "owner" && <Link aria-current={current === "sales" ? "page" : undefined} href="/summary" className={current === "sales" ? activeClass : inactiveClass}>Sales</Link>}
-      <form action={signOut} className="col-span-3 sm:ml-auto">
-        <button className={`${inactiveClass} w-full sm:w-auto`} type="submit">Sign out</button>
-      </form>
+    <div className="cafe-topbar">
+      <Link href="/" className="cafe-brand" aria-label={`${SHOP_NAME} home`}>
+        <Image src="/mariteas-logo.png" alt="MariTea's Burgers & Milk Tea" width={64} height={64} sizes="64px" className="cafe-brand-logo" />
+        <span><strong>{SHOP_NAME}</strong><small>Your everyday café companion</small></span>
+      </Link>
+    <nav aria-label="Main navigation" className="cafe-nav">
+      <Link aria-current={current === "order" ? "page" : undefined} href="/" className={current === "order" ? activeClass : inactiveClass}><Icon name="plus" />New order</Link>
+      <Link aria-current={current === "kitchen" ? "page" : undefined} href="/kitchen" className={current === "kitchen" ? activeClass : inactiveClass}><Icon name="orders" />Orders</Link>
+      {role === "owner" && <Link aria-current={current === "sales" ? "page" : undefined} href="/summary" className={current === "sales" ? activeClass : inactiveClass}><Icon name="sales" />Sales</Link>}
     </nav>
+      <SignOutButton />
+    </div>
   );
 }

@@ -31,6 +31,30 @@ type TicketAction =
 
 const EMPTY_CART: Cart = {};
 
+function ProductMark({ category, itemName = "" }: { category: string; itemName?: string }) {
+  return <span className="cafe-product-mark">
+    <svg aria-hidden="true" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      {category === "Combos" ? <>
+        <path d="m17 7 2-5h3M14 7h8l-1.5 13H17M15 11h6" />
+        <circle cx="18.5" cy="16" r=".7" fill="currentColor" stroke="none" />
+        <circle cx="19.5" cy="18" r=".7" fill="currentColor" stroke="none" />
+        <path d="M2 14a6 5 0 0 1 12 0H2Zm0 3h12M2 20h12l-1 2H3l-1-2ZM6 11h.01M10 11h.01" />
+      </> : category === "Sides" && /nachos/i.test(itemName) ? <>
+        <path d="m4 16 5-12 7 11-12 1Zm7 1 6-9 5 12-11-3Z" />
+        <path d="m8 11 1 1m3 1h.01m5 2h.01M3 21h18" />
+      </> : category === "Sides" && /fries/i.test(itemName) ? <>
+        <path d="M5 11 7 22h10l2-11H5ZM7 11 5 3l3-1 2 9m0 0V1h3v10m1 0 2-8 3 1-2 7M9 15v3m6-3v3" />
+      </> : category === "Milk Tea" ? <>
+        <path d="m13 8 2-6h3M5 8h14M6 8l2 13h8l2-13M7 12h10" />
+        <circle cx="10" cy="16" r=".75" fill="currentColor" stroke="none" />
+        <circle cx="14" cy="17" r=".75" fill="currentColor" stroke="none" />
+        <circle cx="11.5" cy="19" r=".75" fill="currentColor" stroke="none" />
+      </> : category === "Coffee" ? <><path d="M4 8h13v6a5 5 0 0 1-5 5H9a5 5 0 0 1-5-5V8Zm13 1h1a3 3 0 1 1 0 6h-1M3 22h16M8 2v2m4-2v2" /></> : <><path d="M4 10a8 7 0 0 1 16 0H4Zm0 4h16M4 18h16l-1 3H5l-1-3ZM9 6h.01M14 5h.01" /></>}
+    </svg>
+    {category}
+  </span>;
+}
+
 function productQuantity(cart: Cart, itemId: string) {
   return Object.values(cart).reduce((total, line) => total + (line.item.id === itemId ? line.quantity : 0), 0);
 }
@@ -292,14 +316,15 @@ export default function OrderScreen({ items, addons }: { items: MenuItem[]; addo
           <section aria-labelledby="selected-category-heading">
             <h3
               id="selected-category-heading"
-              className="mb-4 font-display text-2xl text-roast sm:text-3xl"
+              className="mb-4 font-sans font-semibold text-2xl text-roast sm:text-3xl"
             >
               {selectedCategory}
             </h3>
             {displayCards.length === 0 ? <p className="rounded-2xl border border-dashed border-roast/20 bg-counter p-8 text-center text-muted">No items in this category yet.</p> : <div className="grid grid-cols-1 gap-3 min-[380px]:grid-cols-2 sm:gap-4 md:grid-cols-3 lg:grid-cols-2 2xl:grid-cols-3">
               {displayCards.map((card) => {
                 if (card.kind === "sized-drink") {
-                  return <article key={`sized-drink-${card.name}`} className="min-w-0 rounded-2xl border border-roast/15 bg-counter p-3 text-roast sm:p-4">
+                  return <article key={`sized-drink-${card.name}`} className="cafe-product min-w-0 rounded-2xl border p-4 text-roast sm:p-5">
+                    <ProductMark category={selectedCategory} itemName={card.name} />
                     <h4 className="mb-4 min-h-7 text-base font-semibold leading-snug sm:text-lg">{card.name}</h4>
                     <div className="grid grid-cols-2 gap-2">{card.sizes.map((item) => {
                       const quantity = productQuantity(cart, item.id);
@@ -326,13 +351,14 @@ export default function OrderScreen({ items, addons }: { items: MenuItem[]; addo
                     }
                     disabled={isSaving || !cartRestored || quantityLimitReached}
                     onClick={() => beginAddItem(item)}
-                    className="relative flex min-h-28 touch-manipulation flex-col justify-between rounded-2xl border border-roast/15 bg-counter p-4 text-left text-roast transition-transform duration-100 active:scale-[0.98] hover:border-pistachio/60 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-pistachio motion-reduce:transition-none motion-reduce:active:scale-100 disabled:cursor-not-allowed disabled:opacity-50 sm:p-5"
+                    className="cafe-product relative flex min-h-40 touch-manipulation flex-col justify-between rounded-2xl border border-roast/15 bg-counter p-4 text-left text-roast transition-transform duration-100 active:scale-[0.98] hover:border-pistachio/60 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-pistachio motion-reduce:transition-none motion-reduce:active:scale-100 disabled:cursor-not-allowed disabled:opacity-50 sm:p-5"
                   >
                     {quantity > 0 && (
                       <span className="absolute right-3 top-3 inline-flex min-h-7 min-w-7 items-center justify-center rounded-full bg-pistachio px-2 text-sm font-bold text-counter tabular-nums">
                         {quantity}
                       </span>
                     )}
+                    <ProductMark category={selectedCategory} itemName={item.name} />
                     <span className="pr-8 text-base font-semibold leading-snug sm:text-lg">
                       {item.name}
                     </span>
@@ -349,13 +375,12 @@ export default function OrderScreen({ items, addons }: { items: MenuItem[]; addo
         <aside
           id="order-ticket"
           aria-labelledby="ticket-heading"
-          className="relative min-w-0 scroll-mt-24 overflow-hidden rounded-2xl border border-roast/15 bg-sticky p-3 text-roast sm:p-5 shadow-[0_8px_18px_rgba(43,33,28,0.12)] lg:sticky lg:top-6 lg:p-6"
+          className="cafe-ticket relative min-w-0 scroll-mt-24 overflow-hidden rounded-2xl border border-roast/10 p-4 text-roast sm:p-5 lg:sticky lg:top-6 lg:p-6"
         >
-          <span aria-hidden="true" className="pointer-events-none absolute right-0 top-0 h-8 w-8 bg-[linear-gradient(225deg,var(--steam)_0_49%,rgba(43,33,28,0.12)_50%,transparent_54%)]" />
           {saveFeedback?.kind === "success" && (
             <div aria-live="polite" className="mb-4 rounded-xl border border-pistachio/25 bg-counter/70 p-4 text-center text-pistachio motion-safe:animate-[feedback-fade_180ms_ease-out] motion-reduce:animate-none">
-              <span className="block text-sm font-semibold">Order placed · {saveFeedback.orderType === "dine_in" ? "Dine in" : "Takeaway"}</span>
-              <span className="font-display text-3xl">Order #{saveFeedback.orderNumber}</span>
+              <span className="block text-sm font-semibold">Order placed · {saveFeedback.orderType === "dine_in" ? "Dine in" : "Take out"}</span>
+              <span className="font-sans font-semibold text-3xl">Order #{saveFeedback.orderNumber}</span>
               <span className="mt-1 block text-sm">{formatPeso(saveFeedback.totalCentavos)} total</span>
             </div>
           )}
@@ -482,7 +507,7 @@ function TicketPanel({
     <div>
       <div className="flex items-center justify-between gap-3">
         <h2 id="ticket-heading" className="font-display text-2xl tracking-tight">
-          New order
+          Your order
         </h2>
         <button
           type="button"
@@ -578,7 +603,7 @@ function TicketPanel({
             {(["takeaway", "dine_in"] as const).map((value) => (
               <label key={value} className={`flex min-h-12 cursor-pointer items-center justify-center rounded-xl border px-3 text-sm font-semibold capitalize ${orderType === value ? "border-pistachio bg-pistachio/15" : "border-roast/20 bg-counter"}`}>
                 <input className="sr-only" type="radio" name="order-type" value={value} checked={orderType === value} disabled={isSaving} onChange={() => setOrderType(value)} />
-                {value === "dine_in" ? "Dine in" : "Takeaway"}
+                {value === "dine_in" ? "Dine in" : "Take out"}
               </label>
             ))}
           </div>
@@ -635,7 +660,7 @@ function TicketPanel({
           disabled={!canSubmit}
           className="min-h-14 w-full rounded-xl bg-pistachio px-5 font-semibold text-counter hover:bg-pistachio/90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-pistachio disabled:cursor-not-allowed disabled:bg-[#6B6259] disabled:text-white"
         >
-          {isSaving ? "Saving order…" : saveFeedback ? "Retry order" : "Payment received - Save"}
+          {isSaving ? "Saving order…" : saveFeedback ? "Retry order" : "Save Order"}
         </button>
       </div>
     </div>

@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { formatPeso } from "@/lib/money";
 import { cancelPaidOrder } from "@/app/actions";
+import Icon from "@/components/Icon";
 
 export default function CancelOrderForm({ orderId, revision, totalCentavos, paymentMethod }: { orderId: string; revision: number; totalCentavos: number; paymentMethod: string | null }) {
   const router = useRouter();
@@ -35,19 +36,19 @@ export default function CancelOrderForm({ orderId, revision, totalCentavos, paym
   }
 
   return (
-    <div className="mt-2 min-w-0 max-w-full">
+    <div className="min-w-0 max-w-full">
       {!open ? (
-        <button type="button" onClick={() => setOpen(true)} className="min-h-11 px-2 text-sm font-semibold text-error underline underline-offset-2">Cancel order</button>
+        <button type="button" onClick={() => setOpen(true)} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-error/30 bg-error/5 px-4 text-sm font-semibold text-error hover:border-error/60 hover:bg-error/10"><Icon name="cancel" />Cancel order</button>
       ) : (
         <form onSubmit={handleSubmit} className="w-full min-w-0 space-y-2">
-          <label className="block text-xs font-semibold" htmlFor={`cancel-reason-${orderId}`}>Reason for cancellation
+          <label className="block text-sm font-semibold" htmlFor={`cancel-reason-${orderId}`}>Reason for cancellation
             <textarea id={`cancel-reason-${orderId}`} required minLength={3} maxLength={250} rows={2} value={reason} disabled={isSaving} onChange={(event) => setReason(event.target.value)} className="mt-1 w-full rounded-lg border border-roast/20 bg-steam p-2 text-sm font-normal text-roast" />
           </label>
           {needsRefund && <label className="flex items-start gap-2 py-2 text-sm"><input type="checkbox" className="h-5 w-5 shrink-0" checked={refundConfirmed} disabled={isSaving} onChange={(event) => setConfirmedRevision(event.target.checked ? revision : null)} /><span>I returned {formatPeso(totalCentavos)} {paymentMethod === "e_wallet" ? "through GCash" : "using the original payment method"}.</span></label>}
           {error && <p role="alert" className="text-xs text-error">{error}</p>}
           <div className="flex flex-wrap gap-3">
-            <button type="submit" disabled={isSaving || reason.trim().length < 3 || (needsRefund && !refundConfirmed)} className="min-h-11 px-2 text-sm font-bold text-error disabled:opacity-50">{isSaving ? "Saving…" : "Confirm cancel"}</button>
-            <button type="button" disabled={isSaving} onClick={() => { setOpen(false); setError(null); }} className="min-h-11 px-2 text-sm font-semibold text-muted">Keep order</button>
+            <button type="submit" disabled={isSaving || reason.trim().length < 3 || (needsRefund && !refundConfirmed)} className="min-h-11 rounded-xl bg-error px-4 text-sm font-semibold text-white hover:bg-error/90 disabled:opacity-50">{isSaving ? "Saving…" : "Confirm cancel"}</button>
+            <button type="button" disabled={isSaving} onClick={() => { setOpen(false); setError(null); }} className="min-h-11 rounded-xl border border-roast/20 px-4 text-sm font-semibold text-roast hover:bg-steam">Keep order</button>
           </div>
         </form>
       )}

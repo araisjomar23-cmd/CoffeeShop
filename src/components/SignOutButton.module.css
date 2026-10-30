@@ -1,0 +1,24 @@
+.dialog {
+  position: fixed;
+  inset: 0;
+  width: min(26rem, calc(100% - 2rem));
+  max-height: calc(100dvh - 2rem);
+  overflow-y: auto;
+  margin: auto;
+  padding: 28px;
+  border: 1px solid #e5dfd4;
+  border-radius: 24px;
+  background: var(--counter);
+  color: var(--roast);
+  box-shadow: 0 24px 80px #2b211c26;
+}
+
+.dialog::backdrop {
+  background: #2b211c66;
+  backdrop-filter: blur(4px);
+}
+
+@media (max-width: 380px) {
+  .dialog { padding: 22px; }
+  .dialog > div { grid-template-columns: 1fr; }
+}

@@ -5,7 +5,7 @@ import Link from "next/link";
 import { requireStaffRole } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { formatPeso } from "@/lib/money";
-import StaffNav from "@/components/StaffNav";
+import PageHeader from "@/components/PageHeader";
 import KitchenOrderActions from "@/components/KitchenOrderActions";
 import KitchenQueueRefresh from "@/components/KitchenQueueRefresh";
 import CancelOrderForm from "@/components/CancelOrderForm";
@@ -18,11 +18,13 @@ type KitchenOrder = Pick<Tables<"orders">, "revision" | "payment_method" | "id" 
   & { order_items: Pick<Tables<"order_items">, "id" | "item_name" | "unit_price_centavos" | "quantity" | "note">[] };
 type MenuOption = Pick<Tables<"menu_items">, "id" | "name" | "category" | "price_centavos">;
 
-export default async function KitchenPage() {
-  return <Suspense fallback={<RouteLoading screen="kitchen" title="Orders" />}><AuthorizedKitchenPage /></Suspense>;
+type KitchenSearchParams = Promise<{ view?: string | string[] }>;
+
+export default function KitchenPage({ searchParams }: { searchParams: KitchenSearchParams }) {
+  return <Suspense fallback={<RouteLoading screen="kitchen" title="Orders" />}><AuthorizedKitchenPage searchParams={searchParams} /></Suspense>;
 }
 
-async function AuthorizedKitchenPage() {
+async function AuthorizedKitchenPage({ searchParams }: { searchParams: KitchenSearchParams }) {
   await connection();
   const role = await requireStaffRole();
   const today = manilaToday();
@@ -49,28 +51,33 @@ async function AuthorizedKitchenPage() {
     loadFailed = true;
   }
 
-  const activeOrders = orders.filter((order) => order.status === "new" || order.status === "ready");
+  const requestedView = (await searchParams).view;
+  const view = requestedView === "ready" || requestedView === "completed" ? requestedView : "new";
+  const preparingOrders = orders.filter((order) => order.status === "new");
+  const readyOrders = orders.filter((order) => order.status === "ready");
   const completedOrders = orders.filter((order) => order.status === "completed");
+  const visibleOrders = view === "ready" ? readyOrders : view === "completed" ? completedOrders : preparingOrders;
+  const viewLabel = view === "ready" ? "Ready to serve" : view === "completed" ? "Completed today" : "In preparation";
 
   return (
     <main className="min-h-screen bg-steam text-roast">
-      <div className="mx-auto w-full max-w-7xl px-3 py-5 sm:px-6 sm:py-7 lg:py-9">
-        <header className="mb-7 border-b border-roast/10 pb-6">
-          <h1 className="font-display text-3xl leading-tight sm:text-4xl lg:text-5xl">Orders</h1>
-          <StaffNav current="kitchen" role={role} />
-          <div className="mt-4"><KitchenQueueRefresh /></div>
-        </header>
+      <div className="cafe-shell">
+        <PageHeader current="kitchen" role={role} title="Orders" description="From the first pour to the final pickup. Keep your counter moving." />
+        <div className="cafe-queue-tools">
+          <nav aria-label="Order status" className="cafe-queue-tabs">
+            <Link className="cafe-queue-tab" aria-current={view === "new" ? "page" : undefined} href="/kitchen">Preparing <span>{preparingOrders.length}</span></Link>
+            <Link className="cafe-queue-tab" aria-current={view === "ready" ? "page" : undefined} href="/kitchen?view=ready">Ready <span>{readyOrders.length}</span></Link>
+            <Link className="cafe-queue-tab" aria-current={view === "completed" ? "page" : undefined} href="/kitchen?view=completed">Completed <span>{completedOrders.length}</span></Link>
+          </nav>
+          <div><KitchenQueueRefresh /></div>
+        </div>
         {loadFailed ? (
           <p role="alert" className="rounded-2xl border border-error/30 bg-counter p-6 font-semibold text-error">Could not load the order queue. Refresh to try again.</p>
         ) : (
           <>
-            <section aria-labelledby="active-orders-heading">
-              <div className="mb-4 flex flex-wrap items-end justify-between gap-3"><div><h2 id="active-orders-heading" className="font-display text-3xl">Active orders</h2><p className="mt-1 text-sm text-muted">{activeOrders.length} waiting or in preparation</p></div><Link href="/" className="inline-flex min-h-12 items-center rounded-xl border border-roast/20 bg-counter px-4 font-semibold">New order</Link></div>
-              {activeOrders.length === 0 ? <p className="rounded-2xl border border-dashed border-roast/20 bg-counter p-8 text-center text-muted">No orders waiting for preparation.</p> : <ul className="grid gap-4 md:grid-cols-2">{activeOrders.map((order) => <KitchenOrderCard key={order.id} order={order} role={role} menuItems={menuItems} addons={addons} />)}</ul>}
-            </section>
-            <section aria-labelledby="completed-orders-heading" className="mt-10">
-              <h2 id="completed-orders-heading" className="mb-4 font-display text-2xl">Completed today</h2>
-              {completedOrders.length === 0 ? <p className="rounded-2xl border border-dashed border-roast/20 bg-counter p-6 text-muted">No completed orders yet.</p> : <ul className="grid gap-3 md:grid-cols-2">{completedOrders.map((order) => <KitchenOrderCard key={order.id} order={order} role={role} menuItems={menuItems} addons={addons} compact />)}</ul>}
+            <section aria-labelledby="queue-heading">
+              <div className="mb-5 flex flex-wrap items-end justify-between gap-3"><div><h2 id="queue-heading" className="text-xl font-semibold">{viewLabel}</h2><p className="mt-1 text-sm text-muted">{visibleOrders.length} {visibleOrders.length === 1 ? "order" : "orders"}{view === "new" ? " to make" : view === "ready" ? " waiting for pickup" : " served today"}</p></div><Link href="/" className="inline-flex min-h-11 items-center rounded-xl border border-roast/15 bg-counter px-4 text-sm font-semibold">+ New order</Link></div>
+              {visibleOrders.length === 0 ? <div className="rounded-2xl border border-dashed border-roast/15 bg-counter px-6 py-16 text-center"><p className="font-display text-2xl">{view === "new" ? "A moment to catch your breath." : view === "ready" ? "Nothing waiting at the counter." : "A fresh day ahead."}</p><p className="mt-3 text-sm text-muted">{view === "new" ? "New orders will appear here when they are placed." : view === "ready" ? "Mark an order ready when it is prepared." : "Completed orders for today will appear here."}</p></div> : <ul className="grid items-start gap-4 md:grid-cols-2 xl:grid-cols-3">{visibleOrders.map((order) => <KitchenOrderCard key={order.id} order={order} role={role} menuItems={menuItems} addons={addons} compact={view === "completed"} />)}</ul>}
             </section>
           </>
         )}
@@ -81,10 +88,10 @@ async function AuthorizedKitchenPage() {
 
 function KitchenOrderCard({ order, role, menuItems, addons, compact = false }: { order: KitchenOrder; role: StaffRole; menuItems: MenuOption[]; addons: MenuOption[]; compact?: boolean }) {
   return (
-    <li className={`min-w-0 rounded-2xl border bg-counter p-4 sm:p-5 ${order.status === "new" ? "border-caramel/60" : "border-roast/10"}`}>
+    <li data-status={order.status} className="cafe-order-card min-w-0 rounded-2xl border bg-counter p-4 sm:p-5">
       <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0 break-words"><p className="font-display text-3xl">#{order.order_number}</p><p className="mt-1 text-sm text-muted">{formatTime(order.created_at)} · {order.order_type?.replace("_", " ") ?? "Order"}{order.customer_name?.trim() ? ` · ${order.customer_name.trim()}` : ""}</p></div>
-        <span className={`inline-flex min-h-9 shrink-0 items-center rounded-full px-3 text-sm font-bold capitalize ${order.status === "new" ? "bg-sticky" : order.status === "ready" ? "bg-pistachio text-counter" : "bg-steam text-muted"}`}>{order.status}</span>
+        <div className="min-w-0 break-words"><p className="font-sans font-semibold text-3xl">#{order.order_number}</p><p className="mt-1 text-sm text-muted">{formatTime(order.created_at)} · {order.order_type?.replace("_", " ") ?? "Order"}{order.customer_name?.trim() ? ` · ${order.customer_name.trim()}` : ""}</p></div>
+        <span className={`inline-flex min-h-8 shrink-0 items-center rounded-full px-3 text-sm font-semibold capitalize ${order.status === "new" ? "bg-sticky text-roast" : order.status === "ready" ? "bg-pistachio/10 text-pistachio" : "bg-steam text-muted"}`}>{order.status === "new" ? "Preparing" : order.status}</span>
       </div>
       <ul className="mt-4 divide-y divide-roast/10">{order.order_items.map((item, index) => <li key={`${item.item_name}-${index}`} className="py-3"><p className="break-words font-semibold"><span className="mr-2 text-muted">{item.quantity}×</span>{item.item_name}</p>{item.note && <p className="mt-1 break-words pl-7 text-sm text-muted">Note: {item.note}</p>}</li>)}</ul>
       {!compact && <p className="mt-3 border-t border-roast/10 pt-3 text-right font-semibold tabular-nums">{formatPeso(order.total_centavos)}</p>}

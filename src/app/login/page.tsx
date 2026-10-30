@@ -42,14 +42,14 @@ async function LoginContent({ searchParams }: LoginPageProps) {
       : null;
 
   return (
-    <main className="flex min-h-dvh items-center justify-center bg-steam px-3 py-5 sm:px-4 sm:py-10 text-roast">
-      <section className="w-full max-w-md rounded-3xl border border-roast/10 bg-counter p-5 shadow-sm sm:p-8">
+    <main className="cafe-login flex min-h-dvh items-center justify-center px-4 py-8 text-roast sm:py-12">
+      <section className="cafe-login-card w-full max-w-md rounded-3xl border bg-counter p-6 sm:p-10">
         <div className="flex justify-center">
           <Image src="/mariteas-logo.png" alt="MariTea’s Burgers & Milk Tea" width={400} height={400} className="mb-2 h-28 w-28 sm:h-40 sm:w-40 object-contain" priority />
         </div>
         <p className="text-center text-sm font-semibold uppercase tracking-[0.14em] text-muted">MariTea&apos;s POS</p>
-        <h1 className="mt-2 font-display text-3xl sm:text-4xl">Owner sign in</h1>
-        <p className="mt-3 text-muted">Your orders and daily sales, in one place.</p>
+        <h1 className="mt-3 font-display text-3xl sm:text-4xl">Welcome back.</h1>
+        <p className="mt-3 text-muted">A fresh start for another good day. Sign in to your café.</p>
         {message && <p role="alert" className="mt-5 rounded-xl border border-error/30 bg-steam p-3 text-sm font-semibold text-error">{message}</p>}
         <form action={signIn} className="mt-6 space-y-4">
           <label className="block text-sm font-semibold" htmlFor="email">Email
@@ -68,8 +68,18 @@ async function LoginContent({ searchParams }: LoginPageProps) {
 
 function LoginLoading() {
   return (
-    <main className="flex min-h-screen items-center justify-center bg-steam px-4 py-10 text-roast">
-      <p role="status" className="rounded-2xl bg-counter p-6 text-muted">Loading sign in…</p>
+    <main className="cafe-login flex min-h-dvh items-center justify-center px-4 py-8 text-roast sm:py-12">
+      <section aria-busy="true" className="cafe-login-card w-full max-w-md rounded-3xl border bg-counter p-6 sm:p-10">
+        <div className="flex justify-center"><Image src="/mariteas-logo.png" alt="MariTea's Burgers & Milk Tea" width={400} height={400} className="mb-2 h-28 w-28 object-contain sm:h-40 sm:w-40" /></div>
+        <p className="text-center text-sm font-semibold uppercase tracking-[0.14em] text-muted">MariTea&apos;s POS</p>
+        <h1 className="mt-3 font-display text-3xl sm:text-4xl">Welcome back.</h1>
+        <p className="mt-3 text-muted">A fresh start for another good day. Sign in to your café.</p>
+        <p role="status" className="sr-only">Loading sign in...</p>
+        <div aria-hidden="true" className="mt-6 space-y-5 motion-safe:animate-pulse">
+          {["Email", "Password"].map(label => <div key={label}><p className="text-sm font-semibold">{label}</p><div className="mt-2 h-12 rounded-xl border border-roast/10 bg-steam" /></div>)}
+          <div className="h-12 rounded-xl bg-roast/20" />
+        </div>
+      </section>
     </main>
   );
 }
