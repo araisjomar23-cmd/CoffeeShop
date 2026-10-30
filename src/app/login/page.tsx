@@ -29,7 +29,7 @@ async function LoginContent({ searchParams }: LoginPageProps) {
       .select("user_id, role")
       .eq("user_id", user.id)
       .maybeSingle();
-    if (profile?.role === "owner") redirect("/");
+    if (profile?.role === "owner") redirect("/dashboard");
   }
 
   const { error } = await searchParams;

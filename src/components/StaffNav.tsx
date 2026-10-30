@@ -5,7 +5,7 @@ import SignOutButton from "@/components/SignOutButton";
 import type { StaffRole } from "@/lib/auth";
 import { SHOP_NAME } from "@/lib/shop";
 
-export default function StaffNav({ current, role }: { current: "order" | "kitchen" | "sales"; role: StaffRole }) {
+export default function StaffNav({ current, role }: { current: "order" | "kitchen" | "sales" | "dashboard"; role: StaffRole }) {
   const activeClass = "cafe-nav-link cafe-nav-active";
   const inactiveClass = "cafe-nav-link";
 
@@ -16,6 +16,7 @@ export default function StaffNav({ current, role }: { current: "order" | "kitche
         <span><strong>{SHOP_NAME}</strong><small>Your everyday café companion</small></span>
       </Link>
     <nav aria-label="Main navigation" className="cafe-nav">
+      {role === "owner" && <Link aria-current={current === "dashboard" ? "page" : undefined} href="/dashboard" className={current === "dashboard" ? activeClass : inactiveClass}><Icon name="dashboard" />Dashboard</Link>}
       <Link aria-current={current === "order" ? "page" : undefined} href="/" className={current === "order" ? activeClass : inactiveClass}><Icon name="plus" />New order</Link>
       <Link aria-current={current === "kitchen" ? "page" : undefined} href="/kitchen" className={current === "kitchen" ? activeClass : inactiveClass}><Icon name="orders" />Orders</Link>
       {role === "owner" && <Link aria-current={current === "sales" ? "page" : undefined} href="/summary" className={current === "sales" ? activeClass : inactiveClass}><Icon name="sales" />Sales</Link>}

@@ -123,6 +123,8 @@ button:not(:disabled), summary { cursor: pointer; }
   .cafe-brand small { font-size: 12px; }
   .cafe-brand-logo { width: 52px; height: 52px; }
   .cafe-nav-link { gap: 6px; padding-inline: 6px; font-size: 14px; }
+  .cafe-nav { max-width: 100%; overflow-x: auto; scrollbar-width: thin; }
+  .cafe-nav > a { flex: 0 0 auto; }
   .cafe-page-intro { padding-top: 24px; }
   .cafe-eyebrow { font-size: 12px; letter-spacing: .06em; }
   .cafe-queue-tabs { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); width: 100%; gap: 6px; }

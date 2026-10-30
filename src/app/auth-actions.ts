@@ -25,7 +25,7 @@ export async function signIn(formData: FormData) {
     redirect("/login?error=not-staff");
   }
 
-  redirect("/");
+  redirect("/dashboard");
 }
 
 export async function signOut() {
