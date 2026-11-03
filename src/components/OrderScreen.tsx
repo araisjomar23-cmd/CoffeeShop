@@ -3,6 +3,7 @@
 import { useEffect, useReducer, useRef, useState } from "react";
 import { createOrder } from "@/app/actions";
 import { formatPeso } from "@/lib/money";
+import ProductPhoto from "@/components/ProductPhoto";
 import { calculateTicketTotal, cartLineKey, isAddonAllowed, restoreTicketSnapshot } from "@/lib/order-ticket";
 import type { Tables } from "@/types/database";
 
@@ -324,6 +325,7 @@ export default function OrderScreen({ items, addons }: { items: MenuItem[]; addo
               {displayCards.map((card) => {
                 if (card.kind === "sized-drink") {
                   return <article key={`sized-drink-${card.name}`} className="cafe-product min-w-0 rounded-2xl border p-4 text-roast sm:p-5">
+                    <ProductPhoto name={card.name} />
                     <ProductMark category={selectedCategory} itemName={card.name} />
                     <h4 className="mb-4 min-h-7 text-base font-semibold leading-snug sm:text-lg">{card.name}</h4>
                     <div className="grid grid-cols-2 gap-2">{card.sizes.map((item) => {
@@ -359,6 +361,7 @@ export default function OrderScreen({ items, addons }: { items: MenuItem[]; addo
                       </span>
                     )}
                     <ProductMark category={selectedCategory} itemName={item.name} />
+                    <ProductPhoto name={item.name} />
                     <span className="pr-8 text-base font-semibold leading-snug sm:text-lg">
                       {item.name}
                     </span>
@@ -535,6 +538,7 @@ function TicketPanel({
                 className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-3 border-b border-dashed border-roast/30 py-4 first:pt-0 motion-safe:animate-[ticket-pop_120ms_ease-out] motion-reduce:animate-none"
               >
                 <div className="col-span-2 min-w-0">
+                  <ProductPhoto name={line.item.name} thumbnail />
                   <p className="break-words font-semibold">{line.item.name}</p>
                   {line.addons.length > 0 && <p className="mt-1 text-xs text-muted">+ {line.addons.map((addon) => addon.name).join(", ")}</p>}
                   <p className="mt-1 text-sm text-muted tabular-nums">

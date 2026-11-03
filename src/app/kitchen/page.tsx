@@ -5,6 +5,7 @@ import Link from "next/link";
 import { requireStaffRole } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { formatPeso } from "@/lib/money";
+import ProductPhoto from "@/components/ProductPhoto";
 import PageHeader from "@/components/PageHeader";
 import KitchenOrderActions from "@/components/KitchenOrderActions";
 import KitchenQueueRefresh from "@/components/KitchenQueueRefresh";
@@ -93,7 +94,7 @@ function KitchenOrderCard({ order, role, menuItems, addons, compact = false }: {
         <div className="min-w-0 break-words"><p className="font-sans font-semibold text-3xl">#{order.order_number}</p><p className="mt-1 text-sm text-muted">{formatTime(order.created_at)} · {order.order_type?.replace("_", " ") ?? "Order"}{order.customer_name?.trim() ? ` · ${order.customer_name.trim()}` : ""}</p></div>
         <span className={`inline-flex min-h-8 shrink-0 items-center rounded-full px-3 text-sm font-semibold capitalize ${order.status === "new" ? "bg-sticky text-roast" : order.status === "ready" ? "bg-pistachio/10 text-pistachio" : "bg-steam text-muted"}`}>{order.status === "new" ? "Preparing" : order.status}</span>
       </div>
-      <ul className="mt-4 divide-y divide-roast/10">{order.order_items.map((item, index) => <li key={`${item.item_name}-${index}`} className="py-3"><p className="break-words font-semibold"><span className="mr-2 text-muted">{item.quantity}×</span>{item.item_name}</p>{item.note && <p className="mt-1 break-words pl-7 text-sm text-muted">Note: {item.note}</p>}</li>)}</ul>
+      <ul className="mt-4 divide-y divide-roast/10">{order.order_items.map((item, index) => <li key={`${item.item_name}-${index}`} className="flow-root py-3"><ProductPhoto name={item.item_name} thumbnail /><p className="break-words font-semibold"><span className="mr-2 text-muted">{item.quantity}×</span>{item.item_name}</p>{item.note && <p className="mt-1 break-words pl-7 text-sm text-muted">Note: {item.note}</p>}</li>)}</ul>
       {!compact && <p className="mt-3 border-t border-roast/10 pt-3 text-right font-semibold tabular-nums">{formatPeso(order.total_centavos)}</p>}
       <KitchenOrderActions orderId={order.id} status={order.status} />
       {!compact && <div className="mt-2 flex flex-wrap items-center gap-4"><EditActiveOrder orderId={order.id} orderNumber={order.order_number} revision={order.revision} originalTotal={order.total_centavos} paymentMethod={order.payment_method} customerName={order.customer_name} orderType={order.order_type === "dine_in" ? "dine_in" : "takeaway"} items={order.order_items.map((item) => ({ id: item.id, name: item.item_name, unitPriceCentavos: item.unit_price_centavos, quantity: item.quantity, note: item.note ?? "" }))} menuItems={menuItems} addons={addons} />{role === "owner" && <CancelOrderForm orderId={order.id} revision={order.revision} totalCentavos={order.total_centavos} paymentMethod={order.payment_method} />}</div>}
